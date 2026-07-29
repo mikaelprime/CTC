@@ -8,6 +8,7 @@ from app.routes import auth
 from app.routes import student
 from app.routes import schedule
 from app.routes import diploma
+from app.routes.enrollment import router as enrollment_router
 
 # Base.metadata.create_all(bind=engine)
 
@@ -16,11 +17,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.include_router(schedule.router)
 app.include_router(auth_router)
-app.include_router(auth.router)
 app.include_router(student.router)
 app.include_router(diploma.router)
+app.include_router(schedule.router)
+app.include_router(enrollment_router)
 
 @app.get("/")
 def root():

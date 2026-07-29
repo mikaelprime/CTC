@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr
+from pydantic.config import ConfigDict
 
 class StudentBase(BaseModel):
     full_name: str
@@ -50,3 +51,9 @@ class StudentResponse(StudentBase):
     model_config = {
         "from_attributes": True
     }
+
+class StudentSimple(BaseModel):
+        id: int
+        full_name: str
+
+        model_config = ConfigDict(from_attributes=True)

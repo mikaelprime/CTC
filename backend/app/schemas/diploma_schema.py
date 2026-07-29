@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from pydantic.config import ConfigDict
 
 class DiplomaBase(BaseModel):
     name: str
@@ -29,3 +30,9 @@ class DiplomaResponse(DiplomaBase):
     model_config = {
         "from_attributes": True
     }
+
+class DiplomaSimple(BaseModel):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)

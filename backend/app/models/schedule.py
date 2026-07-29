@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Time, Boolean
+from sqlalchemy.orm import relationship
 from app.database.base import Base
 
 class Schedule(Base):
@@ -13,3 +14,9 @@ class Schedule(Base):
     end_time = Column(Time, nullable=False)
 
     active = Column(Boolean, default=True)
+
+    enrollments = relationship(
+        "Enrollment",
+        back_populates="schedule",
+        cascade="all, delete-orphan"
+    )

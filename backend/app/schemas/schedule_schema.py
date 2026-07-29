@@ -1,5 +1,6 @@
 from datetime import time
 from pydantic import BaseModel
+from pydantic.config import ConfigDict
 
 class ScheduleCreate(BaseModel):
 
@@ -23,3 +24,11 @@ class ScheduleResponse(BaseModel):
 
 class Config:
     from_attributes = True
+
+class ScheduleSimple(BaseModel):
+    id: int
+    name: str
+    start_time: time
+    end_time: time
+
+    model_config = ConfigDict(from_attributes=True)

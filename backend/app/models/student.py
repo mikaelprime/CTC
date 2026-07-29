@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Date, Boolean, DateTime
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from app.database.base import Base
 
 class Student(Base):
@@ -41,4 +42,10 @@ class Student(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now()
+    )
+
+    enrollments = relationship(
+    "Enrollment",
+    back_populates="student",
+    cascade="all, delete-orphan"
     )
