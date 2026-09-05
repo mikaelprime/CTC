@@ -70,3 +70,9 @@ class Enrollment(Base):
         "Schedule",
         back_populates="enrollments"
     )
+
+    payments = relationship(
+        "Payment",
+        back_populates="enrollment",
+        cascade="all, delete-orphan"
+    )
