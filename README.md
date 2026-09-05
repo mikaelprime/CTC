@@ -10,5 +10,4 @@ Proyecto desarrollado con:
 Roles:
 
 -Administrador
--Gerente
 -Cajero
