@@ -8,6 +8,7 @@ from app.routes import auth
 from app.routes import student
 from app.routes import schedule
 from app.routes import diploma
+from app.routes import payment
 from app.routes.enrollment import router as enrollment_router
 
 # Base.metadata.create_all(bind=engine)
@@ -22,6 +23,7 @@ app.include_router(student.router)
 app.include_router(diploma.router)
 app.include_router(schedule.router)
 app.include_router(enrollment_router)
+app.include_router(payment.router)
 
 @app.get("/")
 def root():
