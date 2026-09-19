@@ -1,49 +1,41 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.database.session import get_db
-from app.schemas.student_schema import (StudentCreate, StudentUpdate, StudentResponse)
-from app.services import student_service
-from app.auth.dependencies import get_current_user
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from datetime import date
+from app.database.database import get_db
+from app.models.student import Student # Tu modelo actualizado con campos del responsable
 
-router = APIRouter(
-    prefix="/students",
-    tags=["Students"],
-    dependencies=[Depends(get_current_user)]
-)
+router = APIRouter(prefix="/students", tags=["Estudiantes"])
 
-@router.get("/", response_model=list[StudentResponse])
-def get_students(db: Session = Depends(get_db)):
-    return student_service.get_students(db)
+class StudentCreate(BaseModel):
+    full_name: str
+    age: Optional[int] = None
+    birth_date: Optional[date] = None
+    dui: Optional[str] = None
+    address: Optional[str] = None
+    email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    schooling: Optional[str] = None # Escolaridad (PDF)
 
-@router.get("/{student_id}", response_model=StudentResponse)
-def get_student(student_id: int, db: Session = Depends(get_db)):
-    return student_service.get_student(db, student_id)
+    # Campos Obligatorios del Responsable (PDF)
+    responsible_name: Optional[str] = None
+    responsible_dui: Optional[str] = None
+    responsible_kinship: Optional[str] = None # Parentesco (PDF)
+    responsible_email: Optional[str] = None
+    responsible_whatsapp: Optional[str] = None
 
-@router.post("/", response_model=StudentResponse)
-def create_student(
-    student: StudentCreate,
-    db: Session = Depends(get_db)
-):
-    return student_service.create_student(db, student)
+@router.post("/")
+def create_student(student: StudentCreate, db: Session = Depends(get_db)):
+    db_student = Student(**student.dict())
+    db.add(db_student)
+    db.commit()
+    db.refresh(db_student)
+    return {
+        "status": "Estudiante y Responsable registrados exitosamente",
+        "data": db_student
+    }
 
-@router.put("/{student_id}", response_model=StudentResponse)
-def update_student(
-    student_id: int,
-    student: StudentUpdate,
-    db: Session = Depends(get_db)
-):
-    return student_service.update_student(
-        db,
-        student_id,
-        student
-    )
-
-@router.delete("/{student_id}")
-def delete_student(
-    student_id: int,
-    db: Session = Depends(get_db)
-):
-    return student_service.delete_student(
-        db,
-        student_id
-    )
+@router.get("/")
+def list_students(db: Session = Depends(get_db)):
+    return db.query(Student).all()
