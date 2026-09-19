@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.schemas.enrollment_schema import (EnrollmentCreate, EnrollmentResponse)
 from app.services.enrollment_service import EnrollmentService
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/enrollments",
-    tags=["Enrollments"]
+    tags=["Enrollments"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.post("/", response_model=EnrollmentResponse)

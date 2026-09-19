@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.schemas.diploma_schema import (DiplomaCreate, DiplomaUpdate, DiplomaResponse)
 from app.services import diploma_service
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/diplomas",
-    tags=["Diplomas"]
+    tags=["Diplomas"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.get("/", response_model=list[DiplomaResponse])
