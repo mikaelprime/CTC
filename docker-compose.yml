@@ -1,5 +1,4 @@
 services:
-
   postgres:
     image: postgres:16
     container_name: ctc_postgres
@@ -11,17 +10,25 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     container_name: ctc_backend
     restart: always
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+
 volumes:
   postgres_data:
