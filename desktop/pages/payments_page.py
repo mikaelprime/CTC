@@ -69,3 +69,33 @@ class PaymentsPage(CrudPage):
             empty_message="No hay pagos registrados todavía. Crea primero una inscripción.",
             parent=parent,
         )
+
+# Lista de precios de CTC El Salvador 
+PRICING_OPTIONS = {
+    "matricula": {
+        "Matrícula Regular": 20.00,
+        "Promo-Matrícula (50% OFF)": 10.00,
+        "Matrícula Gratis": 0.00
+    },
+    "colegiatura": {
+        "Plan Grupal": 25.00,
+        "Plan Privado": 55.00,
+        "Plan On-line": 70.00
+    },
+    "recargo_mora": 3.00 # Recargo por pasarse de 28 días
+}
+
+def calculate_cash_change(total_to_pay: float, cash_received: float) -> dict:
+    if cash_received < total_to_pay:
+        return {
+            "is_valid": False,
+            "change": 0.0,
+            "error": "El efectivo ingresado es menor al total a pagar."
+        }
+    
+    change = cash_received - total_to_pay
+    return {
+        "is_valid": True,
+        "change": round(change, 2),
+        "error": None
+    }
