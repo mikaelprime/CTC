@@ -4,13 +4,16 @@ from app.database.session import get_db
 from app.schemas.payment_schema import (
     PaymentCreate,
     PaymentUpdate,
-    PaymentResponse
+    PaymentResponse,
+    PaymentAdvanceCreate
 )
 from app.services.payment_service import PaymentService
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/payments",
-    tags=["Payments"]
+    tags=["Payments"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.post("/", response_model=PaymentResponse)
@@ -19,6 +22,13 @@ def create_payment(
     db: Session = Depends(get_db)
 ):
     return PaymentService.create(db, data)
+
+@router.post("/advance", response_model=list[PaymentResponse])
+def create_advance_payment(
+    data: PaymentAdvanceCreate,
+    db: Session = Depends(get_db)
+):
+    return PaymentService.create_advance(db, data)
 
 @router.get("/", response_model=list[PaymentResponse])
 def get_payments(

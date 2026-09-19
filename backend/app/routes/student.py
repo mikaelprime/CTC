@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.schemas.student_schema import (StudentCreate, StudentUpdate, StudentResponse)
 from app.services import student_service
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/students",
-    tags=["Students"]
+    tags=["Students"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.get("/", response_model=list[StudentResponse])

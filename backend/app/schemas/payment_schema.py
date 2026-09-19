@@ -29,3 +29,12 @@ class PaymentUpdate(BaseModel):
 class PaymentResponse(PaymentBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+class PaymentAdvanceCreate(BaseModel):
+    enrollment_id: int
+    months: int
+    payment_date: date
+    payment_type: str
+    cash_received: Optional[Decimal] = None
+    change: Optional[Decimal] = None
+    observations: Optional[str] = None

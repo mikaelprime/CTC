@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.schemas.schedule_schema import (ScheduleCreate, ScheduleResponse)
 from app.services.schedule_service import (list_schedules, create_schedule)
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/schedules",
-    tags=["Schedules"]
+    tags=["Schedules"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.get("/", response_model=list[ScheduleResponse])
