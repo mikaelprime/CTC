@@ -1,7 +1,41 @@
 from datetime import date, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, List
+from sqlalchemy.orm import Session
+from app.models.enrollment import Enrollment
+# Asegúrate de importar tu modelo y esquema de Enrollment
+# from app.models.enrollment import Enrollment 
+# from app.schemas.enrollment import EnrollmentCreate
 
 class EnrollmentService:
+
+    # --- MÉTODOS CRUD QUE FALTABAN ---
+
+    @staticmethod
+    def get_all(db: Session) -> List[Any]:
+        return db.query(Enrollment).all()
+
+    @staticmethod
+    def create(db: Session, enrollment: Any) -> Any:
+        # Ajusta según los campos de tu esquema/modelo
+        db_enrollment = Enrollment(**enrollment.dict())
+        db.add(db_enrollment)
+        db.commit()
+        db.refresh(db_enrollment)
+        return db_enrollment
+
+    @staticmethod
+    def get_by_id(db: Session, enrollment_id: int) -> Any:
+        return db.query(Enrollment).filter(Enrollment.id == enrollment_id).first()
+
+    @staticmethod
+    def delete(db: Session, enrollment_id: int) -> Any:
+        db_enrollment = db.query(Enrollment).filter(Enrollment.id == enrollment_id).first()
+        if db_enrollment:
+            db.delete(db_enrollment)
+            db.commit()
+        return db_enrollment
+
+    # --- TUS MÉTODOS EXISTENTES DE CÁLCULO ---
 
     @staticmethod
     def calculate_next_payment_date(start_date: date) -> date:
@@ -14,10 +48,7 @@ class EnrollmentService:
     @staticmethod
     def check_payment_status(last_payment_date: date, current_date: date = None) -> Dict[str, Any]:
         """
-        Determina el estado del pago:
-        - Próximo a vencer (si faltan 7 días o menos)
-        - Vencido / Pendiente (si supera los 28 días)
-        - Aplica recargo de $3.00 si está superado los 28 días.
+        Determina el estado del pago.
         """
         if current_date is None:
             current_date = date.today()
@@ -30,7 +61,7 @@ class EnrollmentService:
                 "status": "Pendiente",
                 "days_overdue": abs(days_remaining),
                 "apply_late_fee": True,
-                "late_fee_amount": 3.00, # Recargo de $3.00 por mora
+                "late_fee_amount": 3.00,
                 "message": "Pago vencido. Se requiere aplicar recargo de $3.00."
             }
         elif days_remaining <= 7:
