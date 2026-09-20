@@ -17,11 +17,21 @@ def test_get_students():
     assert response.status_code == 200
 
 def test_get_student_by_id():
-    response = client.get("/students/6", headers=auth_headers())
+    email = f"lookup-{uuid4().hex[:8]}@ctc.edu.sv"
+    created = client.post(
+        "/students/",
+        headers=auth_headers(),
+        json={"full_name": "Lookup Student", "email": email},
+    )
+    assert created.status_code == 200
+    response = client.get(
+        f"/students/{created.json()['id']}",
+        headers=auth_headers(),
+    )
 
     data = response.json()
 
-    assert data["id"] == 6
+    assert data["id"] == created.json()["id"]
     assert "full_name" in data
     assert "email" in data
 

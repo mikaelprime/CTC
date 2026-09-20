@@ -104,6 +104,7 @@ class PaymentsPage(CrudPage):
         panel.setObjectName("RegisterPanel")
         row = QHBoxLayout(panel)
         self.register_status = QLabel("Comprobando caja...")
+        self.register_status.setObjectName("RegisterStatus")
         row.addWidget(self.register_status)
         row.addStretch()
         self.open_register_button = QPushButton("Abrir caja")
@@ -153,9 +154,26 @@ class PaymentsPage(CrudPage):
         )
 
     def open_register(self):
-        amount, accepted = QInputDialog.getDouble(self, "Abrir caja", "Fondo inicial:", 0, 0, 100000, 2)
-        if not accepted:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Abrir caja diaria")
+        dialog.setMinimumWidth(380)
+        form = QFormLayout(dialog)
+        intro = QLabel("Define el fondo inicial. Desde ese momento el sistema sumará cada cobro y mostrará el total esperado.")
+        intro.setWordWrap(True)
+        intro.setObjectName("PaymentHint")
+        amount_input = QDoubleSpinBox()
+        amount_input.setRange(0, 1000000)
+        amount_input.setDecimals(2)
+        amount_input.setSuffix(" USD")
+        form.addRow(intro)
+        form.addRow("Fondo inicial", amount_input)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() != QDialog.Accepted:
             return
+        amount = amount_input.value()
         try:
             api.post("/cashier/register/open", json={"initial_amount": amount})
         except ApiError as exc:
@@ -240,13 +258,18 @@ class PaymentsPage(CrudPage):
 
     def close_register(self):
         dialog = QDialog(self)
-        dialog.setWindowTitle("Cierre y arqueo de caja")
+        dialog.setWindowTitle("Cierre diario y arqueo")
+        dialog.setMinimumWidth(430)
         form = QFormLayout(dialog)
+        intro = QLabel("Cuenta el efectivo físico. El sistema comparará ese valor con el total esperado y dejará registrada la auditoría.")
+        intro.setWordWrap(True)
+        intro.setObjectName("PaymentHint")
         physical = QDoubleSpinBox()
         physical.setRange(0, 1000000)
         physical.setDecimals(2)
         explanation = QLineEdit()
         explanation.setPlaceholderText("Obligatoria si existe diferencia")
+        form.addRow(intro)
         form.addRow("Efectivo contado", physical)
         form.addRow("Auditoría", explanation)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

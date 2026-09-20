@@ -197,6 +197,21 @@ QGroupBox::title {{
     padding: 0 4px;
     color: {TEXT_MUTED};
 }}
+#RegisterPanel {{
+    background-color: {SURFACE};
+    border-radius: 12px;
+    padding: 10px;
+}}
+#RegisterStatus {{
+    color: {PRIMARY_BRIGHT};
+    font-size: 13px;
+    font-weight: 600;
+}}
+#PaymentHint {{
+    background-color: transparent;
+    color: {TEXT_MUTED};
+    padding: 6px 0;
+}}
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit {{
     background-color: {SURFACE_ALT};
     border: 1px solid {BORDER};
