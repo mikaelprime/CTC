@@ -44,6 +44,46 @@ docker compose up -d
 El backend queda disponible en `http://localhost:8000` y su documentación en
 `http://localhost:8000/docs`.
 
+## Crear y compartir el EXE
+
+El cliente Windows se empaqueta con PyInstaller, una herramienta gratuita:
+
+```powershell
+& .venv\Scripts\python.exe -m pip install pyinstaller pywin32-ctypes
+& .\desktop\build_exe.ps1
+```
+
+El script crea `dist\CTC-Campus.zip`. Para compartirlo, configura `config.json`
+con la URL pública del backend antes de distribuirlo. El EXE es el cliente; la
+base de datos y la API deben estar publicadas por separado para que varias
+computadoras compartan los mismos datos.
+
+## Publicar gratis en la nube
+
+La configuración incluida usa Supabase para PostgreSQL y Render para FastAPI.
+Ambos servicios tienen planes gratuitos con límites y el servicio web puede
+dormirse después de un período sin tráfico.
+
+1. Crea una cuenta en Supabase y crea un proyecto PostgreSQL.
+2. En `Connect` copia la cadena de conexión compatible con IPv4/pooler.
+3. No ejecutes scripts manuales en la base: Alembic aplica las migraciones al iniciar.
+4. Sube este repositorio a GitHub sin subir `.env` ni contraseñas.
+5. En Render selecciona `New > Blueprint` y conecta el repositorio. Render leerá
+	`render.yaml` y creará `ctc-backend`.
+6. Configura en Render las variables privadas `DATABASE_URL`, `SECRET_KEY`,
+	`SMTP_USER`, `SMTP_PASSWORD` y `SMTP_FROM_EMAIL`.
+7. Prueba `https://TU-SERVICIO.onrender.com/api/health`.
+8. Edita `dist\CTC-Campus-release\config.json`:
+
+	```json
+	{"api_base_url": "https://TU-SERVICIO.onrender.com"}
+	```
+
+9. Ejecuta `desktop\build_exe.ps1` y sube `dist\CTC-Campus.zip` a Google Drive.
+
+Google Drive solo distribuye el archivo. Los datos compartidos viven en Supabase
+y el `.exe` se comunica con ellos mediante FastAPI.
+
 ## Usuarios iniciales
 
 El seed del backend crea estas cuentas de desarrollo:

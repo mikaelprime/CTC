@@ -32,6 +32,20 @@ set API_BASE_URL=http://mi-servidor:8000
 python desktop/main.py
 ```
 
+## Crear la aplicación Windows
+
+Instala PyInstaller en el entorno virtual y ejecuta el script de compilación:
+
+```powershell
+& .venv\Scripts\python.exe -m pip install pyinstaller
+& .\desktop\build_exe.ps1
+```
+
+El resultado queda en `dist\CTC-Campus-release` y `dist\CTC-Campus.zip`. Antes de
+compartirlo, edita `config.json` junto al ejecutable y cambia `api_base_url` por la
+URL pública del backend. El ejecutable no contiene la base de datos ni credenciales
+SMTP.
+
 ## Módulos
 
 Todos los módulos leen y escriben datos reales: estudiantes, inscripciones, pagos,

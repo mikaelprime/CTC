@@ -4,12 +4,32 @@ Unlike the old Streamlit frontend, this app has no per-request session object,
 so the JWT is held on a module-level singleton for the lifetime of the process.
 """
 
+import json
 import os
+from pathlib import Path
 from typing import Any, Optional
 
 import requests
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000").rstrip("/")
+
+def _load_api_url() -> str:
+    configured = os.environ.get("API_BASE_URL")
+    if configured:
+        return configured.rstrip("/")
+
+    config_path = Path(__file__).with_name("config.json")
+    if config_path.exists():
+        try:
+            value = json.loads(config_path.read_text(encoding="utf-8")).get("api_base_url")
+            if value:
+                return str(value).rstrip("/")
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    return "http://localhost:8000"
+
+
+API_BASE_URL = _load_api_url()
 _TIMEOUT = 10
 
 
