@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from api_client import api
 from widgets.crud_page import Column, CrudPage, Field
 
@@ -27,8 +29,6 @@ def _create(payload: dict):
         "diploma_id": payload["diploma_id"],
         "schedule_id": payload["schedule_id"],
         "enrollment_date": payload["enrollment_date"],
-        "start_date": payload["start_date"],
-        "end_date": payload["end_date"],
     }
     return api.post("/enrollments/", json=body)
 
@@ -46,6 +46,9 @@ class EnrollmentsPage(CrudPage):
             Column("schedule", "Turno", formatter=lambda r: r["schedule"]["name"]),
             Column("start_date", "Inicio"),
             Column("end_date", "Fin"),
+            Column("next_payment", "Próximo pago", formatter=lambda r: (
+                (date.fromisoformat(r["start_date"]) + timedelta(days=28)).isoformat()
+            )),
             Column("status", "Estado"),
         ]
         create_spec = [
@@ -53,8 +56,6 @@ class EnrollmentsPage(CrudPage):
             Field("diploma_id", "Programa", kind="combo", options=_diploma_options),
             Field("schedule_id", "Turno", kind="combo", options=_schedule_options),
             Field("enrollment_date", "Fecha de inscripción", kind="date"),
-            Field("start_date", "Fecha de inicio", kind="date"),
-            Field("end_date", "Fecha de fin", kind="date"),
         ]
         super().__init__(
             title="Gestión de Inscripciones",

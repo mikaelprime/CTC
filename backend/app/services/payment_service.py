@@ -1,5 +1,5 @@
 import calendar
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -30,13 +30,108 @@ class PaymentService:
         if not due_payments:
             return
 
-        PaymentRepository.mark_as_paid(db, due_payments)
-
         for payment in due_payments:
-            PaymentService._notify_if_paid(payment)
+            payment.status = "PENDIENTE"
+            if payment.enrollment:
+                payment.enrollment.status = "PENDIENTE"
+        db.commit()
 
     @staticmethod
-    def create(db: Session, data):
+    def collect(db: Session, data, cashier_id: int | None = None):
+        enrollment = EnrollmentRepository.get_by_id(db, data.enrollment_id)
+        if not enrollment:
+            raise HTTPException(status_code=404, detail="La matrícula no existe")
+        if data.months < 1 or data.months > 12:
+            raise HTTPException(status_code=400, detail="Puedes pagar entre 1 y 12 meses")
+
+        PaymentService._apply_due_charges(db)
+        today = data.payment_date
+        pending_payment = (
+            db.query(Payment)
+            .filter(Payment.enrollment_id == enrollment.id, Payment.status == "PENDIENTE")
+            .order_by(Payment.due_date.asc())
+            .first()
+        )
+        last_payment = PaymentRepository.get_last_by_enrollment(db, enrollment.id)
+        first_due = pending_payment.due_date if pending_payment else (
+            last_payment.due_date + timedelta(days=28)
+            if last_payment else enrollment.start_date
+        )
+        surcharge = Decimal("3.00") if first_due < today else Decimal("0.00")
+        monthly_amount = Decimal(str(enrollment.diploma.monthly_fee))
+        amount = monthly_amount * data.months
+        total = amount + surcharge
+        if data.cash_received < total:
+            raise HTTPException(status_code=400, detail=f"El efectivo debe ser de al menos ${total:.2f}")
+
+        payments = []
+        for index in range(data.months):
+            due_date = first_due + timedelta(days=28 * index)
+            payments.append(Payment(
+                enrollment_id=enrollment.id,
+                cashier_id=cashier_id,
+                payment_date=today,
+                due_date=due_date,
+                amount=monthly_amount,
+                surcharge=surcharge if index == 0 else Decimal("0.00"),
+                total=monthly_amount + (surcharge if index == 0 else Decimal("0.00")),
+                payment_type=data.payment_type,
+                status="PAGADO",
+                cash_received=data.cash_received if index == 0 else None,
+                change=(data.cash_received - total) if index == 0 else None,
+                observations=data.observations or f"Cobro de {data.months} mes(es)",
+            ))
+        created = PaymentRepository.create_many(db, payments)
+        enrollment.status = "ACTIVA"
+        db.commit()
+        next_payment = created[-1].due_date + timedelta(days=28)
+        EmailService.send_payment_confirmation(
+            created[0], next_payment_date=next_payment, months_paid=data.months
+        )
+        return {
+            "payment_ids": [payment.id for payment in created],
+            "enrollment_id": enrollment.id,
+            "months_paid": data.months,
+            "amount": amount,
+            "surcharge": surcharge,
+            "total": total,
+            "cash_received": data.cash_received,
+            "change": data.cash_received - total,
+            "first_due_date": first_due,
+            "next_payment_date": next_payment,
+            "late": surcharge > 0,
+        }
+
+    @staticmethod
+    def next_payment_info(db: Session, enrollment_id: int) -> dict:
+        enrollment = EnrollmentRepository.get_by_id(db, enrollment_id)
+        if not enrollment:
+            raise HTTPException(status_code=404, detail="La matrícula no existe")
+        pending = (
+            db.query(Payment)
+            .filter(Payment.enrollment_id == enrollment_id, Payment.status == "PENDIENTE")
+            .order_by(Payment.due_date.asc())
+            .first()
+        )
+        last = PaymentRepository.get_last_by_enrollment(db, enrollment_id)
+        due_date = pending.due_date if pending else (
+            last.due_date + timedelta(days=28) if last else enrollment.start_date
+        )
+        today = date.today()
+        surcharge = Decimal("3.00") if due_date < today else Decimal("0.00")
+        return {
+            "enrollment_id": enrollment_id,
+            "student_name": enrollment.student.full_name,
+            "diploma_name": enrollment.diploma.name,
+            "due_date": due_date,
+            "days_until_due": (due_date - today).days,
+            "monthly_amount": Decimal(str(enrollment.diploma.monthly_fee)),
+            "automatic_surcharge": surcharge,
+            "is_overdue": due_date < today,
+        }
+
+    @staticmethod
+    def create(db: Session, data, cashier_id: int | None = None):
 
         # Validar matrícula
         enrollment = EnrollmentRepository.get_by_id(
@@ -63,9 +158,16 @@ class PaymentService:
                 detail="El recargo no puede ser negativo"
             )
 
+        if data.amount + data.surcharge <= 0:
+            raise HTTPException(status_code=400, detail="El total debe ser mayor que cero")
+
+        if data.cash_received is not None and data.cash_received < data.amount + data.surcharge:
+            raise HTTPException(status_code=400, detail="El efectivo recibido es menor al total")
+
         # Crear pago
         payment = Payment(
             enrollment_id=data.enrollment_id,
+            cashier_id=cashier_id,
             payment_date=data.payment_date,
             due_date=data.due_date,
             amount=data.amount,
@@ -85,7 +187,7 @@ class PaymentService:
         return created
 
     @staticmethod
-    def create_advance(db: Session, data):
+    def create_advance(db: Session, data, cashier_id: int | None = None):
 
         # Validar matrícula
         enrollment = EnrollmentRepository.get_by_id(
@@ -132,6 +234,7 @@ class PaymentService:
             payments.append(
                 Payment(
                     enrollment_id=enrollment.id,
+                    cashier_id=cashier_id,
                     payment_date=data.payment_date,
                     due_date=due_date,
                     amount=monthly_fee,

@@ -1,111 +1,110 @@
 import smtplib
-from email.mime.text import MIMEText
+from datetime import timedelta
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+from app.core.config import settings
+
 
 class EmailService:
-    
-    SMTP_SERVER = "smtp.gmail.com"
-    SMTP_PORT = 587
-    SENDER_EMAIL = "notificaciones@ctc.edu.sv"
-    SENDER_PASSWORD = "tu_clave_de_aplicacion"
+    SMTP_SERVER = settings.SMTP_HOST
+    SMTP_PORT = settings.SMTP_PORT
+    SENDER_EMAIL = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
+    SENDER_PASSWORD = settings.SMTP_PASSWORD
 
     @staticmethod
-    def send_html_ticket(student_email: str, student_name: str, concept: str, amount: float, cash_received: float, change: float, receipt_id: str):
-        """Genera y envía un Ticket visual HTML directo al correo del alumno."""
-        subject = f"Comprobante de Pago #{receipt_id} - CTC El Salvador"
-        
-        # Diseño del Ticket 
-        html_content = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px;">
-            <div style="max-width: 400px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.05);">
-                <div style="text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 15px;">
-                    <h2 style="margin: 0; color: #0b192c;">CTC EL SALVADOR</h2>
-                    <p style="margin: 3px 0; font-size: 12px; color: #555;">Centro Técnico de Capacitación</p>
-                    <p style="margin: 3px 0; font-size: 12px; color: #555;">NIT/NRC: 0614-180926-101-2</p>
-                    <p style="margin: 3px 0; font-weight: bold; font-size: 14px; color: #333;">TICKET DE COMPROBANTE #{receipt_id}</p>
-                </div>
-
-                <div style="font-size: 13px; color: #333; margin-bottom: 15px;">
-                    <p style="margin: 4px 0;"><strong>Estudiante:</strong> {student_name}</p>
-                    <p style="margin: 4px 0;"><strong>Fecha:</strong> 19/09/2026</p>
-                </div>
-
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 15px;">
-                    <thead>
-                        <tr style="border-bottom: 1px solid #000; text-align: left;">
-                            <th style="padding: 5px 0;">Concepto</th>
-                            <th style="padding: 5px 0; text-align: right;">Monto</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style="padding: 8px 0;">{concept}</td>
-                            <td style="padding: 8px 0; text-align: right;">${amount:.2f}</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div style="border-top: 1px dashed #000; padding-top: 10px; font-size: 13px;">
-                    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 15px; margin-bottom: 5px;">
-                        <span>TOTAL PAGADO:</span>
-                        <span>${amount:.2f}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; color: #555;">
-                        <span>Efectivo Recibido:</span>
-                        <span>${cash_received:.2f}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; color: #555;">
-                        <span>Cambio Entregado:</span>
-                        <span>${change:.2f}</span>
-                    </div>
-                </div>
-
-                <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #777; border-top: 1px solid #eee; padding-top: 10px;">
-                    <p style="margin: 2px 0;">¡Gracias por tu pago puntual!</p>
-                    <p style="margin: 2px 0;">Conserva este ticket como tu comprobante oficial.</p>
-                </div>
+    def send_payment_confirmation(payment, next_payment_date=None, months_paid=1):
+        student = payment.enrollment.student
+        if not student.email:
+            return
+        next_date = next_payment_date or (payment.due_date + timedelta(days=28))
+        html = f"""
+        <!doctype html>
+        <html><body style="margin:0;background:#eef5f4;font-family:Arial;color:#183039">
+          <div style="max-width:640px;margin:32px auto;background:#fff;border-radius:18px;overflow:hidden">
+            <div style="padding:30px 34px;background:#123b43;color:#fff">
+              <div style="font-size:12px;letter-spacing:2px;color:#76e0d1;font-weight:bold">CTC EL SALVADOR</div>
+              <h1 style="margin:12px 0 6px">Pago recibido</h1>
+              <p style="margin:0;color:#c7e4e1">Tu comprobante de pago está listo.</p>
             </div>
-        </body>
-        </html>
+            <div style="padding:30px 34px">
+              <p style="font-size:16px">Hola <strong>{student.full_name}</strong>,</p>
+              <div style="padding:20px;background:#f2fbfa;border-left:5px solid #13a895;border-radius:8px">
+                <div style="font-size:12px;color:#668087;text-transform:uppercase">Total pagado</div>
+                <div style="font-size:30px;font-weight:bold;color:#123b43;margin-top:7px">${float(payment.total):,.2f}</div>
+                <div style="font-size:13px;color:#5d7379">{months_paid} mes(es) cubierto(s)</div>
+              </div>
+              <table style="width:100%;border-collapse:separate;border-spacing:0 10px;font-size:14px;margin-top:18px">
+                <tr><td>Fecha de pago</td><td style="text-align:right;font-weight:bold">{payment.payment_date}</td></tr>
+                <tr><td>Vencimiento cubierto</td><td style="text-align:right;font-weight:bold">{payment.due_date}</td></tr>
+                <tr><td>Próximo pago</td><td style="text-align:right;font-weight:bold;color:#0b8f7e">{next_date}</td></tr>
+              </table>
+              <p style="color:#70858b;font-size:12px">Las colegiaturas se programan cada 28 días.</p>
+            </div>
+            <div style="padding:18px 34px;background:#f5f8f8;color:#84979b;font-size:11px">Comprobante generado automáticamente por CTC Campus.</div>
+          </div>
+        </body></html>
         """
-        EmailService._send_email(student_email, subject, html_content, is_html=True)
+        EmailService._send_email(student.email, f"Comprobante de pago CTC #{payment.id}", html, True)
 
     @staticmethod
-    def generate_thermal_ticket_text(student_name: str, concept: str, amount: float, cash_received: float, change: float, receipt_id: str) -> str:
-        """Genera el texto formateado plano listo para mandar a una impresora térmica."""
-        return f"""
-========================================
-           CTC EL SALVADOR              
-     Centro Técnico de Capacitación     
-========================================
-TICKET N°: {receipt_id}
-FECHA: 19/09/2026
-CLIENTE: {student_name}
-----------------------------------------
-CONCEPTO                         MONTO  
-----------------------------------------
-{concept:<28} ${amount:>6.2f}
-----------------------------------------
-TOTAL A PAGAR:                ${amount:>6.2f}
-EFECTIVO RECIBIDO:            ${cash_received:>6.2f}
-CAMBIO:                       ${change:>6.2f}
-----------------------------------------
-   ¡GRACIAS POR TU PAGO EN CTC!        
-========================================
-"""
+    def send_enrollment_confirmation(enrollment):
+        student = enrollment.student
+        if not student.email:
+            return
+        next_payment = enrollment.start_date + timedelta(days=28)
+        html = f"""
+        <!doctype html>
+        <html><body style="margin:0;background:#eef5f4;font-family:Arial;color:#183039">
+          <div style="max-width:640px;margin:32px auto;background:#fff;border-radius:18px;overflow:hidden">
+            <div style="padding:30px 34px;background:#123b43;color:#fff">
+              <div style="font-size:12px;letter-spacing:2px;color:#76e0d1;font-weight:bold">CTC EL SALVADOR</div>
+              <h1 style="margin:12px 0 6px">Inscripción confirmada</h1>
+              <p style="margin:0;color:#c7e4e1">Tu lugar en el programa ha sido registrado.</p>
+            </div>
+            <div style="padding:30px 34px">
+              <p style="font-size:16px">Hola <strong>{student.full_name}</strong>,</p>
+              <div style="padding:20px;background:#f2fbfa;border-left:5px solid #13a895;border-radius:8px">
+                <div style="font-size:12px;color:#668087;text-transform:uppercase">Programa académico</div>
+                <div style="font-size:21px;font-weight:bold;color:#123b43;margin-top:7px">{enrollment.diploma.name}</div>
+              </div>
+              <table style="width:100%;border-collapse:separate;border-spacing:0 10px;font-size:14px;margin-top:18px">
+                <tr><td>Fecha de inscripción</td><td style="text-align:right;font-weight:bold">{enrollment.enrollment_date}</td></tr>
+                <tr><td>Inicio de clases</td><td style="text-align:right;font-weight:bold">{enrollment.start_date}</td></tr>
+                <tr><td>Finalización estimada</td><td style="text-align:right;font-weight:bold">{enrollment.end_date}</td></tr>
+                <tr><td>Próximo pago</td><td style="text-align:right;font-weight:bold;color:#0b8f7e">{next_payment}</td></tr>
+              </table>
+              <p style="color:#70858b;font-size:12px">Las colegiaturas se programan cada 28 días.</p>
+            </div>
+            <div style="padding:18px 34px;background:#f5f8f8;color:#84979b;font-size:11px">Comprobante generado automáticamente por CTC Campus.</div>
+          </div>
+        </body></html>
+        """
+        EmailService._send_email(student.email, f"Confirmación de inscripción CTC #{enrollment.id}", html, True)
 
     @staticmethod
-    def _send_email(to_email: str, subject: str, content: str, is_html: bool = False):
+    def send_html_ticket(student_email, student_name, concept, amount, cash_received, change, receipt_id):
+        html = f"<html><body><h2>CTC El Salvador</h2><p>Estudiante: {student_name}</p><p>Concepto: {concept}</p><p>Total: ${amount:.2f}</p><p>Efectivo: ${cash_received:.2f}</p><p>Cambio: ${change:.2f}</p><p>Comprobante: {receipt_id}</p></body></html>"
+        EmailService._send_email(student_email, f"Comprobante de pago #{receipt_id} - CTC", html, True)
+
+    @staticmethod
+    def generate_thermal_ticket_text(student_name, concept, amount, cash_received, change, receipt_id):
+        return f"CTC EL SALVADOR\nTICKET: {receipt_id}\nCLIENTE: {student_name}\nCONCEPTO: {concept}\nTOTAL: ${amount:.2f}\nEFECTIVO: ${cash_received:.2f}\nCAMBIO: ${change:.2f}\n"
+
+    @staticmethod
+    def _send_email(to_email, subject, content, is_html=False):
         try:
-            msg = MIMEMultipart()
-            msg['From'] = EmailService.SENDER_EMAIL
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            
-            mime_type = 'html' if is_html else 'plain'
-            msg.attach(MIMEText(content, mime_type))
-
-            print(f"[CORREO] Ticket enviado con éxito a {to_email}")
-        except Exception as e:
-            print(f"[ERROR CORREO] {e}")
+            message = MIMEMultipart()
+            message["From"] = EmailService.SENDER_EMAIL
+            message["To"] = to_email
+            message["Subject"] = subject
+            message.attach(MIMEText(content, "html" if is_html else "plain"))
+            if not EmailService.SENDER_EMAIL or not EmailService.SENDER_PASSWORD:
+                print(f"[CORREO] SMTP no configurado; ticket preparado para {to_email}")
+                return
+            with smtplib.SMTP(EmailService.SMTP_SERVER, EmailService.SMTP_PORT, timeout=15) as smtp:
+                smtp.starttls()
+                smtp.login(EmailService.SENDER_EMAIL, EmailService.SENDER_PASSWORD)
+                smtp.send_message(message)
+        except Exception as exc:
+            print(f"[ERROR CORREO] {exc}")

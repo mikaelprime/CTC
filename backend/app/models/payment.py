@@ -14,6 +14,12 @@ class Payment(Base):
         nullable=False
     )
 
+    cashier_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
     payment_date = Column(
         Date,
         nullable=False

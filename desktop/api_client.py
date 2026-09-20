@@ -21,6 +21,8 @@ class ApiClient:
     def __init__(self):
         self.token: Optional[str] = None
         self.user_email: Optional[str] = None
+        self.user_role: Optional[str] = None
+        self.user_id: Optional[int] = None
 
     def is_authenticated(self) -> bool:
         return bool(self.token)
@@ -28,6 +30,8 @@ class ApiClient:
     def logout(self) -> None:
         self.token = None
         self.user_email = None
+        self.user_role = None
+        self.user_id = None
 
     def login(self, email: str, password: str) -> None:
         try:
@@ -42,8 +46,11 @@ class ApiClient:
         if resp.status_code != 200:
             raise ApiError(self._detail(resp) or "Correo o contraseña incorrectos.")
 
-        self.token = resp.json()["access_token"]
-        self.user_email = email
+        data = resp.json()
+        self.token = data["access_token"]
+        self.user_email = data.get("email", email)
+        self.user_role = data.get("role")
+        self.user_id = data.get("user_id")
 
     @staticmethod
     def _detail(resp: requests.Response) -> Optional[str]:

@@ -16,7 +16,10 @@ def create_enrollment(
     enrollment: EnrollmentCreate,
     db: Session = Depends(get_db)
 ):
-    return EnrollmentService.create(db, enrollment)
+    try:
+        return EnrollmentService.create(db, enrollment)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.get("/", response_model=list[EnrollmentResponse])
 def get_all(db: Session = Depends(get_db)):

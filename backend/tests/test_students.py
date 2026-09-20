@@ -1,12 +1,23 @@
+from uuid import uuid4
+
 from tests.conftest import client
 
+
+def auth_headers():
+    response = client.post(
+        "/auth/login",
+        json={"email": "admin@ctc.edu.sv", "password": "123456"},
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
 def test_get_students():
-    response = client.get("/students/")
+    response = client.get("/students/", headers=auth_headers())
 
     assert response.status_code == 200
 
 def test_get_student_by_id():
-    response = client.get("/students/6")
+    response = client.get("/students/6", headers=auth_headers())
 
     data = response.json()
 
@@ -17,13 +28,15 @@ def test_get_student_by_id():
     assert response.status_code == 200
 
 def test_create_student():
+    email = f"pyteststudent-{uuid4().hex[:8]}@ctc.edu.sv"
 
     response = client.post(
         "/students/",
+        headers=auth_headers(),
         json={
             "full_name": "Pytest Student",
             "birth_date": "2007-01-01",
-            "email": "pyteststudent@ctc.edu.sv",
+            "email": email,
             "phone": "7777-7777",
             "address": "Santa Ana",
             "education_level": "Bachillerato",
@@ -42,10 +55,10 @@ def test_create_student():
 
     assert "id" in data
     assert data["full_name"] == "Pytest Student"
-    assert data["email"] == "pyteststudent@ctc.edu.sv"
+    assert data["email"] == email
 
 def test_student_not_found():
-    response = client.get("/students/9999999999")
+    response = client.get("/students/9999999999", headers=auth_headers())
 
     assert response.status_code == 404
 
@@ -53,6 +66,7 @@ def test_create_student_invalid_email():
 
     response = client.post(
         "/students/",
+        headers=auth_headers(),
         json={
             "full_name": "Error Test",
             "birth_date": "2007-01-01",

@@ -11,12 +11,12 @@ def _create(payload: dict):
         "full_name": payload["full_name"],
         "birth_date": payload["birth_date"],
         "email": payload["email"],
-        "phone": payload["phone"],
+        "contact_phone": payload["contact_phone"],
         "address": payload["address"],
-        "education_level": payload["education_level"],
-        "guardian_name": payload["guardian_name"],
-        "guardian_dui": payload["guardian_dui"],
-        "guardian_relationship": payload["guardian_relationship"],
+        "schooling": payload["schooling"],
+        "responsible_name": payload["responsible_name"],
+        "responsible_dui": payload["responsible_dui"],
+        "responsible_kinship": payload["responsible_kinship"],
     }
     return api.post("/students/", json=body)
 
@@ -31,20 +31,19 @@ class StudentsPage(CrudPage):
             Column("id", "ID"),
             Column("full_name", "Nombre completo"),
             Column("email", "Correo"),
-            Column("phone", "Teléfono"),
-            Column("education_level", "Nivel educativo"),
-            Column("is_active", "Estado", formatter=lambda r: "Activo" if r.get("is_active") else "Inactivo"),
+            Column("contact_phone", "Teléfono"),
+            Column("schooling", "Escolaridad"),
         ]
         create_spec = [
             Field("full_name", "Nombre completo"),
             Field("birth_date", "Fecha de nacimiento", kind="date"),
             Field("email", "Correo"),
-            Field("phone", "Teléfono"),
+            Field("contact_phone", "Teléfono"),
             Field("address", "Dirección"),
-            Field("education_level", "Nivel educativo"),
-            Field("guardian_name", "Nombre del responsable"),
-            Field("guardian_dui", "DUI del responsable"),
-            Field("guardian_relationship", "Parentesco"),
+            Field("schooling", "Escolaridad"),
+            Field("responsible_name", "Nombre del responsable"),
+            Field("responsible_dui", "DUI del responsable"),
+            Field("responsible_kinship", "Parentesco"),
         ]
         super().__init__(
             title="Gestión de Estudiantes",

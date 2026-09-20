@@ -11,8 +11,8 @@ class EnrollmentBase(BaseModel):
     schedule_id: int
 
     enrollment_date: date
-    start_date: date
-    end_date: date
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
 
     status: Optional[str] = "ACTIVA"
     observations: Optional[str] = None

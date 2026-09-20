@@ -40,7 +40,8 @@ def require_roles(*allowed_roles: str):
 
     def dependency(current_user: User = Depends(get_current_user)) -> User:
 
-        if current_user.role.name not in allowed_roles:
+        allowed = {role.upper() for role in allowed_roles}
+        if current_user.role.name.upper() not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permisos para realizar esta acción"

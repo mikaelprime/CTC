@@ -31,11 +31,15 @@ NAV_ITEMS = [
     ("⚙️ Configuración", SettingsPage),
 ]
 
+ADMIN_ONLY = {"🎓 Diplomas", "🧾 Cajeros", "⚙️ Configuración"}
+
 
 class MainWindow(QMainWindow):
-    def __init__(self, on_logout):
+    def __init__(self, on_logout, on_exit=None, theme_manager=None):
         super().__init__()
         self.on_logout = on_logout
+        self.on_exit = on_exit
+        self.theme_manager = theme_manager
         self.setWindowTitle("CTC Campus · Admin Console")
 
         central = QWidget()
@@ -52,7 +56,7 @@ class MainWindow(QMainWindow):
 
         brand = QLabel("CTC Campus")
         brand.setObjectName("SidebarBrand")
-        brand_sub = QLabel("ADMIN CONSOLE")
+        brand_sub = QLabel((api.user_role or "USUARIO").upper())
         brand_sub.setObjectName("SidebarBrandSub")
         sidebar_layout.addWidget(brand)
         sidebar_layout.addWidget(brand_sub)
@@ -62,7 +66,11 @@ class MainWindow(QMainWindow):
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
 
-        for index, (label, page_cls) in enumerate(NAV_ITEMS):
+        visible_items = NAV_ITEMS
+        if (api.user_role or "").upper() in {"CAJERO", "CASHIER"}:
+            visible_items = [item for item in NAV_ITEMS if item[0] not in ADMIN_ONLY]
+
+        for index, (label, page_cls) in enumerate(visible_items):
             btn = QPushButton(label)
             btn.setObjectName("NavButton")
             btn.setCheckable(True)
@@ -73,6 +81,15 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addStretch()
 
+        display_row = QHBoxLayout()
+        theme_btn = QPushButton("Modo claro")
+        theme_btn.clicked.connect(lambda: self.toggle_theme(theme_btn))
+        fullscreen_btn = QPushButton("Pantalla completa")
+        fullscreen_btn.clicked.connect(lambda: self.toggle_fullscreen(fullscreen_btn))
+        display_row.addWidget(theme_btn)
+        display_row.addWidget(fullscreen_btn)
+        sidebar_layout.addLayout(display_row)
+
         user_label = QLabel(api.user_email or "")
         user_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
         sidebar_layout.addWidget(user_label)
@@ -80,6 +97,10 @@ class MainWindow(QMainWindow):
         logout_btn = QPushButton("Cerrar sesión")
         logout_btn.clicked.connect(self.handle_logout)
         sidebar_layout.addWidget(logout_btn)
+
+        exit_btn = QPushButton("Salir del programa")
+        exit_btn.clicked.connect(self.handle_exit)
+        sidebar_layout.addWidget(exit_btn)
 
         root_layout.addWidget(sidebar)
 
@@ -102,5 +123,26 @@ class MainWindow(QMainWindow):
             widget.reload()
 
     def handle_logout(self) -> None:
+        self.close()
         api.logout()
         self.on_logout()
+
+    def handle_exit(self) -> None:
+        if self.on_exit:
+            self.on_exit()
+        else:
+            self.close()
+
+    def toggle_theme(self, button: QPushButton) -> None:
+        if not self.theme_manager:
+            return
+        mode = self.theme_manager.toggle()
+        button.setText("Modo oscuro" if mode == "light" else "Modo claro")
+
+    def toggle_fullscreen(self, button: QPushButton) -> None:
+        if self.isFullScreen():
+            self.showMaximized()
+            button.setText("Pantalla completa")
+        else:
+            self.showFullScreen()
+            button.setText("Salir pantalla completa")

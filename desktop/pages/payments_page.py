@@ -1,4 +1,21 @@
-from api_client import api
+from datetime import date
+
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QComboBox,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+)
+
+from api_client import ApiError, api
 from widgets.crud_page import Column, CrudPage, Field
 
 
@@ -40,6 +57,7 @@ def _delete(row: dict):
 
 class PaymentsPage(CrudPage):
     def __init__(self, parent=None):
+        self.is_cashier = (api.user_role or "").upper() in {"CAJERO", "CASHIER"}
         columns = [
             Column("id", "ID"),
             Column("enrollment_id", "Matrícula", formatter=lambda r: f"#{r['enrollment_id']}"),
@@ -48,7 +66,7 @@ class PaymentsPage(CrudPage):
             Column("due_date", "Vencimiento"),
             Column("status", "Estado"),
         ]
-        create_spec = [
+        create_spec = None if self.is_cashier else [
             Field("enrollment_id", "Matrícula", kind="combo", options=_enrollment_options),
             Field("payment_date", "Fecha de pago", kind="date"),
             Field("due_date", "Fecha de vencimiento", kind="date"),
@@ -69,6 +87,193 @@ class PaymentsPage(CrudPage):
             empty_message="No hay pagos registrados todavía. Crea primero una inscripción.",
             parent=parent,
         )
+        self._add_register_controls()
+        if self.is_cashier:
+            self._add_collect_button()
+
+    def _add_collect_button(self):
+        button = QPushButton("Cobrar colegiatura")
+        button.setProperty("class", "primary")
+        button.clicked.connect(self.collect_payment)
+        self.layout().insertWidget(3, button)
+
+    def _add_register_controls(self):
+        if (api.user_role or "").upper() not in {"CAJERO", "CASHIER"}:
+            return
+        panel = QGroupBox("Caja del turno")
+        panel.setObjectName("RegisterPanel")
+        row = QHBoxLayout(panel)
+        self.register_status = QLabel("Comprobando caja...")
+        row.addWidget(self.register_status)
+        row.addStretch()
+        self.open_register_button = QPushButton("Abrir caja")
+        self.open_register_button.setProperty("class", "primary")
+        self.open_register_button.clicked.connect(self.open_register)
+        row.addWidget(self.open_register_button)
+        self.close_register_button = QPushButton("Cerrar caja")
+        self.close_register_button.clicked.connect(self.close_register)
+        row.addWidget(self.close_register_button)
+        self.monthly_button = QPushButton("Cierre mensual")
+        self.monthly_button.clicked.connect(self.show_monthly_close)
+        row.addWidget(self.monthly_button)
+        self.layout().insertWidget(2, panel)
+        self.refresh_register()
+
+    def refresh_register(self):
+        try:
+            register = api.get("/cashier/register/current")
+        except ApiError:
+            self.register_status.setText("Caja cerrada")
+            self.open_register_button.setEnabled(True)
+            self.close_register_button.setEnabled(False)
+            return
+        self.register_status.setText(
+            f"Caja abierta · Fondo ${float(register['initial_amount']):,.2f} · "
+            f"Cobrado ${float(register['collected_amount']):,.2f} · "
+            f"Total esperado ${float(register['expected_amount']):,.2f}"
+        )
+        self.open_register_button.setEnabled(False)
+        self.close_register_button.setEnabled(True)
+
+    def show_monthly_close(self):
+        month = date.today().month
+        year = date.today().year
+        try:
+            report = api.get(f"/cashier/monthly?year={year}&month={month}")
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo cargar el cierre mensual", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            f"Cierre mensual {report['periodo']}",
+            f"Cajas cerradas: {report['cajas_cerradas']}\n"
+            f"Total cobrado: ${float(report['total_cobrado_mes']):,.2f}\n"
+            f"Efectivo contado: ${float(report['total_efectivo_contado']):,.2f}\n"
+            f"Descuadres: ${float(report['total_descuadres_mes']):,.2f}",
+        )
+
+    def open_register(self):
+        amount, accepted = QInputDialog.getDouble(self, "Abrir caja", "Fondo inicial:", 0, 0, 100000, 2)
+        if not accepted:
+            return
+        try:
+            api.post("/cashier/register/open", json={"initial_amount": amount})
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo abrir la caja", str(exc))
+            return
+        self.refresh_register()
+
+    def collect_payment(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Cobro de colegiatura")
+        dialog.setMinimumWidth(430)
+        form = QFormLayout(dialog)
+        enrollment = QComboBox()
+        options = _enrollment_options()
+        for label, value in options:
+            enrollment.addItem(label, value)
+        months = QComboBox()
+        for number in range(1, 13):
+            months.addItem(f"{number} mes{'es' if number != 1 else ''}", number)
+        payment_type = QComboBox()
+        for label, value in _TYPE_OPTIONS:
+            payment_type.addItem(label, value)
+        cash = QDoubleSpinBox()
+        cash.setRange(0, 1000000)
+        cash.setDecimals(2)
+        due_info = QLabel("Selecciona una matrícula para consultar su vencimiento.")
+        due_info.setWordWrap(True)
+        due_info.setObjectName("PaymentHint")
+        enrollment.currentIndexChanged.connect(
+            lambda: self.update_due_info(enrollment, months, due_info)
+        )
+        months.currentIndexChanged.connect(
+            lambda: self.update_due_info(enrollment, months, due_info)
+        )
+        form.addRow("Estudiante / matrícula", enrollment)
+        form.addRow("Plan de pago", months)
+        form.addRow("Método", payment_type)
+        form.addRow("Efectivo recibido", cash)
+        form.addRow(due_info)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        self.update_due_info(enrollment, months, due_info)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            result = api.post("/payments/collect", json={
+                "enrollment_id": enrollment.currentData(),
+                "payment_date": date.today().isoformat(),
+                "payment_type": payment_type.currentData(),
+                "cash_received": cash.value(),
+                "months": months.currentData(),
+            })
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo registrar el cobro", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            "Cobro registrado",
+            f"Total: ${float(result['total']):,.2f}\n"
+            f"Cambio: ${float(result['change']):,.2f}\n"
+            f"Próximo pago: {result['next_payment_date']}",
+        )
+        self.reload()
+        self.refresh_register()
+
+    def update_due_info(self, enrollment, months, label):
+        if enrollment.currentData() is None:
+            return
+        try:
+            info = api.get(f"/payments/next/{enrollment.currentData()}")
+            amount = float(info["monthly_amount"]) * int(months.currentData())
+            surcharge = float(info["automatic_surcharge"])
+            label.setText(
+                f"Vence: {info['due_date']} ({info['days_until_due']} días) · "
+                f"Total estimado: ${amount + surcharge:,.2f} "
+                f"({'incluye mora de $3.00' if surcharge else 'sin mora'})"
+            )
+        except ApiError as exc:
+            label.setText(str(exc))
+
+    def close_register(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Cierre y arqueo de caja")
+        form = QFormLayout(dialog)
+        physical = QDoubleSpinBox()
+        physical.setRange(0, 1000000)
+        physical.setDecimals(2)
+        explanation = QLineEdit()
+        explanation.setPlaceholderText("Obligatoria si existe diferencia")
+        form.addRow("Efectivo contado", physical)
+        form.addRow("Auditoría", explanation)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            result = api.post("/cashier/register/close", json={
+                "physical_amount": physical.value(),
+                "explanation": explanation.text().strip() or None,
+            })
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo cerrar la caja", str(exc))
+            return
+        summary = (
+            "CAJA CERRADA\n\n"
+            f"Fondo inicial: ${float(result['monto_inicial']):,.2f}\n"
+            f"Cobrado por sistema: ${float(result['cobrado_sistema']):,.2f}\n"
+            f"Total esperado: ${float(result['esperado_total']):,.2f}\n"
+            f"Efectivo contado: ${float(result['reportado_fisico']):,.2f}\n"
+            f"Diferencia: ${float(result['diferencia']):,.2f}\n\n"
+            f"Auditoría: {result['auditoria_nota']}"
+        )
+        QMessageBox.information(self, "Cierre diario y arqueo", summary)
+        self.refresh_register()
 
 # Lista de precios de CTC El Salvador 
 PRICING_OPTIONS = {

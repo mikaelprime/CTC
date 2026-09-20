@@ -76,7 +76,8 @@ class DashboardPage(QWidget):
             kpi_grid.setColumnStretch(col, 1)
         layout.addLayout(kpi_grid)
 
-        charts_row = QHBoxLayout()
+        charts_container = QWidget()
+        charts_row = QHBoxLayout(charts_container)
         charts_row.setSpacing(14)
 
         ingresos_box = QFrame()
@@ -106,7 +107,8 @@ class DashboardPage(QWidget):
         dist_layout.addLayout(self.dist_legend)
         charts_row.addWidget(dist_box, stretch=1)
 
-        layout.addLayout(charts_row)
+        layout.addWidget(charts_container)
+        charts_container.setVisible(False)
 
         act_label = QLabel("Registro de Actividad Reciente")
         act_label.setObjectName("PageSubtitle")
@@ -121,6 +123,7 @@ class DashboardPage(QWidget):
         self.activity_table.verticalHeader().setVisible(False)
         self.activity_table.horizontalHeader().setStretchLastSection(True)
         self.activity_table.setMinimumHeight(220)
+        self.activity_table.setMaximumHeight(280)
         layout.addWidget(self.activity_table)
 
         self.reload()

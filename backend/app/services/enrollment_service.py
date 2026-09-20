@@ -1,7 +1,10 @@
+import calendar
 from datetime import date, timedelta
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from app.models.enrollment import Enrollment
+from app.models.diploma import Diploma
+from app.services.email_service import EmailService
 # Asegúrate de importar tu modelo y esquema de Enrollment
 # from app.models.enrollment import Enrollment 
 # from app.schemas.enrollment import EnrollmentCreate
@@ -16,12 +19,30 @@ class EnrollmentService:
 
     @staticmethod
     def create(db: Session, enrollment: Any) -> Any:
-        # Ajusta según los campos de tu esquema/modelo
-        db_enrollment = Enrollment(**enrollment.dict())
+        data = enrollment.model_dump(exclude_unset=True)
+        diploma = db.query(Diploma).filter(Diploma.id == data["diploma_id"]).first()
+        if diploma is None:
+            raise ValueError("El diplomado seleccionado no existe")
+
+        start_date = data.get("start_date") or data["enrollment_date"]
+        end_date = data.get("end_date") or EnrollmentService._add_months(
+            start_date, diploma.duration_months
+        )
+        data.update(start_date=start_date, end_date=end_date)
+        db_enrollment = Enrollment(**data)
         db.add(db_enrollment)
         db.commit()
         db.refresh(db_enrollment)
+        EmailService.send_enrollment_confirmation(db_enrollment)
         return db_enrollment
+
+    @staticmethod
+    def _add_months(base_date: date, months: int) -> date:
+        month_index = base_date.month - 1 + months
+        year = base_date.year + month_index // 12
+        month = month_index % 12 + 1
+        day = min(base_date.day, calendar.monthrange(year, month)[1])
+        return date(year, month, day)
 
     @staticmethod
     def get_by_id(db: Session, enrollment_id: int) -> Any:

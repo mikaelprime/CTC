@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from app.auth.dependencies import require_roles
 
 router = APIRouter(prefix="/config", tags=["Configuración"])
 
@@ -23,7 +24,7 @@ def get_config():
     return app_config
 
 @router.put("/")
-def update_config(data: ConfigUpdate):
+def update_config(data: ConfigUpdate, _admin=Depends(require_roles("ADMIN", "ADMINISTRADOR"))):
     """Permite al administrador actualizar las políticas de cobro y recargos."""
     global app_config
     app_config["institution_name"] = data.institution_name

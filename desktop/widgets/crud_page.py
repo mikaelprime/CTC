@@ -152,6 +152,10 @@ class CrudPage(QWidget):
         layout.addWidget(sub)
 
         toolbar = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar por nombre, correo o cualquier dato...")
+        self.search_input.textChanged.connect(self._render_rows)
+        toolbar.addWidget(self.search_input, stretch=1)
         refresh_btn = QPushButton("⟳ Actualizar")
         refresh_btn.clicked.connect(self.reload)
         toolbar.addWidget(refresh_btn)
@@ -190,9 +194,11 @@ class CrudPage(QWidget):
         self._render_rows()
 
     def _render_rows(self) -> None:
-        self.table.setRowCount(len(self._rows))
+        query = self.search_input.text().strip().lower()
+        rows = [row for row in self._rows if not query or query in self._search_text(row).lower()]
+        self.table.setRowCount(len(rows))
         self.table.verticalHeader().setDefaultSectionSize(40)
-        for r, row in enumerate(self._rows):
+        for r, row in enumerate(rows):
             for c, col in enumerate(self.columns):
                 text = col.formatter(row) if col.formatter else str(row.get(col.key, ""))
                 item = QTableWidgetItem(text)
@@ -203,6 +209,13 @@ class CrudPage(QWidget):
                 btn.setStyleSheet("padding: 3px 10px;")
                 btn.clicked.connect(lambda _checked=False, row=row: self.on_delete(row))
                 self.table.setCellWidget(r, len(self.columns), btn)
+
+    def _search_text(self, value: Any) -> str:
+        if isinstance(value, dict):
+            return " ".join(self._search_text(item) for item in value.values())
+        if isinstance(value, (list, tuple)):
+            return " ".join(self._search_text(item) for item in value)
+        return str(value)
 
     def on_create(self) -> None:
         dialog = RecordDialog(f"Registrar", self.create_spec, self)

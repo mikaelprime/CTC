@@ -1,91 +1,102 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QFormLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QApplication, QFormLayout, QGraphicsOpacityEffect, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from api_client import ApiError, api
-from theme import BORDER, SURFACE
-from window_utils import show_maximized_on_current_screen
 
 
 class LoginWindow(QWidget):
     def __init__(self, on_success):
         super().__init__()
-        self.on_success = on_success
+        self.on_login_success = on_success
+        self._submitting = False
         self.setWindowTitle("CTC Campus · Iniciar sesión")
+        self.setObjectName("LoginShell")
+        self.setMinimumSize(900, 600)
 
-        outer = QVBoxLayout(self)
-        outer.addStretch()
-        centered_row = QHBoxLayout()
-        centered_row.addStretch()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setAlignment(Qt.AlignCenter)
 
         card = QWidget()
-        card.setFixedWidth(380)
-        card.setStyleSheet(f"background-color: {SURFACE}; border: 1px solid {BORDER}; border-radius: 14px;")
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(32, 32, 32, 32)
+        card.setObjectName("LoginCard")
+        card.setMaximumWidth(480)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(42, 38, 42, 42)
+        card_layout.setSpacing(14)
 
-        title = QLabel("🏫 CTC Campus")
-        title.setStyleSheet("font-size: 20px; font-weight: 700; border: none;")
-        title.setAlignment(Qt.AlignCenter)
-        subtitle = QLabel("Admin Console")
-        subtitle.setStyleSheet("color: #6bd8cb; font-size: 11px; letter-spacing: 1px; border: none;")
-        subtitle.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addSpacing(16)
+        eyebrow = QLabel("CENTRO TÉCNICO DE CAPACITACIÓN")
+        eyebrow.setObjectName("LoginEyebrow")
+        title = QLabel("CTC Campus")
+        title.setObjectName("LoginTitle")
+        subtitle = QLabel("Gestiona matrículas, colegiaturas y cajas desde un solo lugar.")
+        subtitle.setObjectName("LoginSubtitle")
+        subtitle.setWordWrap(True)
+        card_layout.addWidget(eyebrow)
+        card_layout.addWidget(title)
+        card_layout.addWidget(subtitle)
+        card_layout.addSpacing(12)
 
         form = QFormLayout()
+        form.setVerticalSpacing(12)
         self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("admin@ctc.edu.sv")
+        self.email_input.setObjectName("LoginInput")
+        self.email_input.setPlaceholderText("correo@ctc.edu.sv")
         self.password_input = QLineEdit()
+        self.password_input.setObjectName("LoginInput")
+        self.password_input.setPlaceholderText("Tu contraseña")
         self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.returnPressed.connect(self.handle_login)
         form.addRow("Correo", self.email_input)
         form.addRow("Contraseña", self.password_input)
-        layout.addLayout(form)
+        card_layout.addLayout(form)
 
-        self.login_btn = QPushButton("Ingresar")
-        self.login_btn.setProperty("class", "primary")
-        self.login_btn.clicked.connect(self.handle_login)
-        layout.addWidget(self.login_btn)
+        button = QPushButton("Iniciar sesión")
+        button.setObjectName("LoginButton")
+        button.setProperty("class", "primary")
+        button.clicked.connect(self.handle_login)
+        card_layout.addSpacing(8)
+        card_layout.addWidget(button)
 
-        self.error_label = QLabel("")
-        self.error_label.setStyleSheet("color: #ef4444; border: none;")
-        self.error_label.setWordWrap(True)
-        layout.addWidget(self.error_label)
+        exit_button = QPushButton("Salir del programa")
+        exit_button.setObjectName("LoginExitButton")
+        exit_button.clicked.connect(QApplication.instance().quit)
+        card_layout.addWidget(exit_button)
 
-        centered_row.addWidget(card)
-        centered_row.addStretch()
-        outer.addLayout(centered_row)
-        outer.addStretch()
+        footer = QLabel("Acceso seguro para administradores y cajeros")
+        footer.setObjectName("LoginFooter")
+        footer.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(footer)
+        layout.addWidget(card)
 
-        self.password_input.returnPressed.connect(self.handle_login)
-        self.email_input.setFocus()
+        self.opacity_effect = QGraphicsOpacityEffect(card)
+        card.setGraphicsEffect(self.opacity_effect)
+        self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity", self)
+        self.fade_animation.setDuration(650)
+        self.fade_animation.setStartValue(0.0)
+        self.fade_animation.setEndValue(1.0)
+        self.fade_animation.setEasingCurve(QEasingCurve.OutCubic)
 
-    def show_on_current_screen(self) -> None:
-        show_maximized_on_current_screen(self)
+    def show_on_current_screen(self):
+        screen = QGuiApplication.primaryScreen().availableGeometry()
+        self.setGeometry(screen)
+        self.showFullScreen()
+        self.fade_animation.start()
 
-    def handle_login(self) -> None:
+    def handle_login(self):
+        if self._submitting:
+            return
         email = self.email_input.text().strip()
         password = self.password_input.text()
-        if not email or not password:
-            self.error_label.setText("Ingresa correo y contraseña.")
+        if not email or not password or "@" not in email:
+            QMessageBox.warning(self, "Validación", "Ingresa un correo válido y tu contraseña.")
             return
-
-        self.login_btn.setEnabled(False)
-        self.login_btn.setText("Ingresando...")
+        self._submitting = True
         try:
             api.login(email, password)
         except ApiError as exc:
-            self.error_label.setText(str(exc))
-        else:
-            self.on_success()
-        finally:
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Ingresar")
+            self._submitting = False
+            QMessageBox.critical(self, "No se pudo iniciar sesión", str(exc))
+            return
+        self._submitting = False
+        self.on_login_success()

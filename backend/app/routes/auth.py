@@ -1,37 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.database.session import get_db
-from app.schemas.auth_schema import TokenResponse
-from app.services.auth_service import login
+from app.auth.jwt_handler import create_access_token
+from app.auth.security import verify_password
+from app.database.database import get_db
+from app.models.user import User
+from app.schemas.auth_schema import LoginRequest, TokenResponse
 
-router = APIRouter(
-    prefix="/auth",
-    tags=["Autenticación"]
-)
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.post(
-    "/login",
-    response_model=TokenResponse
-)
-def login_user(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
-):
-    # form_data.username recibe el correo/usuario que envías desde Swagger
-    token = login(
-        db,
-        form_data.username,
-        form_data.password
-    )
+@router.post("/login", response_model=TokenResponse)
+def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == str(credentials.email).lower()).first()
 
-    if token is None:
+    if not user or not user.is_active or not verify_password(credentials.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Correo o contraseña incorrectos."
+            detail="Credenciales incorrectas",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
+    access_token = create_access_token(data={
+        "sub": user.email,
+        "user_id": user.id,
+        "role": user.role.name,
+    })
     return {
-        "access_token": token,
-        "token_type": "bearer"
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user.role.name,
+        "user_id": user.id,
+        "email": user.email,
     }

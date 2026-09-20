@@ -34,7 +34,6 @@ python desktop/main.py
 
 ## Módulos
 
-Todos los módulos con endpoints en el backend (Estudiantes, Inscripciones, Pagos,
-Horarios, Diplomas) leen y escriben datos reales. **Cajeros** y **Configuración**
-muestran un aviso porque el backend todavía no tiene esos endpoints — son vistas de
-referencia hasta que se agregue esa API.
+Todos los módulos leen y escriben datos reales: estudiantes, inscripciones, pagos,
+horarios, diplomas, cajeros y configuración. La interfaz también permite buscar
+registros, alternar tema claro/oscuro y usar pantalla completa.

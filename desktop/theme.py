@@ -31,12 +31,71 @@ STYLESHEET = f"""
 QWidget {{
     background-color: {BG};
 }}
+QLabel {{
+    background-color: transparent;
+    border: none;
+}}
+QFormLayout QLabel {{
+    background-color: transparent;
+    border: none;
+}}
 QMainWindow, QDialog {{
     background-color: {BG};
 }}
+#LoginShell {{
+    background-color: #08111f;
+}}
+#LoginCard {{
+    background-color: #111f32;
+    border: 1px solid #29415a;
+    border-radius: 18px;
+}}
+#LoginEyebrow {{
+    color: {PRIMARY_BRIGHT};
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}}
+#LoginTitle {{
+    color: #f4fbff;
+    font-size: 34px;
+    font-weight: 700;
+}}
+#LoginSubtitle {{
+    color: {TEXT_MUTED};
+    font-size: 13px;
+}}
+#LoginInput {{
+    min-height: 34px;
+    background-color: #0b1727;
+    border: 1px solid #2c4862;
+    border-radius: 8px;
+    padding: 6px 10px;
+}}
+#LoginInput:focus {{
+    border: 1px solid {PRIMARY_BRIGHT};
+}}
+#LoginButton {{
+    min-height: 42px;
+    border-radius: 9px;
+    font-size: 14px;
+}}
+#LoginFooter {{
+    color: #6f8aa1;
+    font-size: 11px;
+}}
+#LoginExitButton {{
+    background: transparent;
+    border: none;
+    color: {TEXT_MUTED};
+    padding: 4px;
+}}
+#LoginExitButton:hover {{
+    color: {ERROR};
+}}
 #Sidebar {{
     background-color: {SURFACE};
-    border-right: 1px solid {BORDER};
+    border: none;
 }}
 #SidebarBrand {{
     font-size: 15px;
@@ -74,7 +133,7 @@ QPushButton#NavButton:checked {{
 }}
 #KpiCard {{
     background-color: {SURFACE};
-    border: 1px solid {BORDER};
+    border: none;
     border-radius: 12px;
 }}
 #KpiLabel {{
@@ -93,9 +152,8 @@ QPushButton#NavButton:checked {{
 }}
 QTableWidget {{
     background-color: {SURFACE};
-    border: 1px solid {BORDER};
-    border-radius: 8px;
-    gridline-color: {BORDER};
+    border: none;
+    gridline-color: transparent;
 }}
 QHeaderView::section {{
     background-color: {SURFACE_ALT};
@@ -108,6 +166,37 @@ QHeaderView::section {{
 QTableWidget::item {{
     padding: 4px;
 }}
+QTableWidget::item:alternate {{
+    background-color: {SURFACE_ALT};
+}}
+QTableWidget::item:selected {{
+    background-color: {PRIMARY};
+    color: #ffffff;
+}}
+QLabel#SummaryCaption {{
+    color: {TEXT_MUTED};
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}}
+QLabel#SummaryValue {{
+    color: {TEXT};
+    font-size: 18px;
+    font-weight: 700;
+    padding-bottom: 8px;
+}}
+QGroupBox {{
+    border: none;
+    margin-top: 8px;
+    padding-top: 12px;
+    font-weight: 600;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: 0px;
+    padding: 0 4px;
+    color: {TEXT_MUTED};
+}}
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit {{
     background-color: {SURFACE_ALT};
     border: 1px solid {BORDER};
@@ -116,12 +205,12 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit {{
 }}
 QPushButton {{
     background-color: {SURFACE_ALT};
-    border: 1px solid {BORDER};
+    border: none;
     border-radius: 6px;
     padding: 7px 14px;
 }}
 QPushButton:hover {{
-    border-color: {PRIMARY_BRIGHT};
+    background-color: {PRIMARY};
 }}
 QPushButton[class="primary"] {{
     background-color: {PRIMARY};
@@ -138,13 +227,12 @@ QLabel#Badge {{
     font-size: 11px;
 }}
 QTabWidget::pane {{
-    border: 1px solid {BORDER};
-    border-radius: 8px;
+    border: none;
 }}
 QTabBar::tab {{
     background: {SURFACE};
     padding: 8px 16px;
-    border: 1px solid {BORDER};
+    border: none;
     border-bottom: none;
 }}
 QTabBar::tab:selected {{
@@ -152,3 +240,29 @@ QTabBar::tab:selected {{
     color: #003732;
 }}
 """
+
+
+def stylesheet_for(mode: str) -> str:
+    if mode != "light":
+        return STYLESHEET
+
+    replacements = {
+        "#0b1326": "#f4f7f8",
+        "#171f33": "#ffffff",
+        "#1d2740": "#e8eef0",
+        "#2a3552": "#d6e0e3",
+        "#dae2fd": "#17252b",
+        "#94a3b8": "#60747c",
+        "#08111f": "#eaf1f2",
+        "#111f32": "#ffffff",
+        "#29415a": "#d3e0e3",
+        "#f4fbff": "#10252b",
+        "#0b1727": "#f7fafb",
+        "#2c4862": "#c2d2d6",
+        "#6f8aa1": "#71878e",
+        "#003732": "#ffffff",
+    }
+    light_stylesheet = STYLESHEET
+    for dark_color, light_color in replacements.items():
+        light_stylesheet = light_stylesheet.replace(dark_color, light_color)
+    return light_stylesheet

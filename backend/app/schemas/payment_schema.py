@@ -28,6 +28,7 @@ class PaymentUpdate(BaseModel):
 
 class PaymentResponse(PaymentBase):
     id: int
+    cashier_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
 class PaymentAdvanceCreate(BaseModel):
@@ -38,3 +39,26 @@ class PaymentAdvanceCreate(BaseModel):
     cash_received: Optional[Decimal] = None
     change: Optional[Decimal] = None
     observations: Optional[str] = None
+
+
+class PaymentCollectCreate(BaseModel):
+    enrollment_id: int
+    payment_date: date
+    payment_type: str = "Efectivo"
+    cash_received: Decimal
+    months: int = 1
+    observations: Optional[str] = None
+
+
+class PaymentCollectResponse(BaseModel):
+    payment_ids: list[int]
+    enrollment_id: int
+    months_paid: int
+    amount: Decimal
+    surcharge: Decimal
+    total: Decimal
+    cash_received: Decimal
+    change: Decimal
+    first_due_date: date
+    next_payment_date: date
+    late: bool

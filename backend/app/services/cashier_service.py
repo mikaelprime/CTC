@@ -44,12 +44,30 @@ class CashierService:
         return active_box
 
     @staticmethod
+    def current_register_summary(db: Session, cashier_id: int) -> dict:
+        register = CashierService.verify_active_box(db, cashier_id)
+        collected = db.query(func.sum(Payment.amount + Payment.surcharge)).filter(
+            Payment.cashier_id == cashier_id,
+            Payment.status == "PAGADO",
+            Payment.created_at >= register.opened_at,
+        ).scalar() or 0
+        expected = float(register.initial_amount or 0) + float(collected)
+        return {
+            "id": register.id,
+            "initial_amount": float(register.initial_amount or 0),
+            "collected_amount": round(float(collected), 2),
+            "expected_amount": round(expected, 2),
+            "is_open": True,
+            "opened_at": register.opened_at,
+        }
+
+    @staticmethod
     def close_daily_register(db: Session, cashier_id: int, physical_amount: float, explanation: str = None) -> dict:
         """Cierra la caja diaria y realiza auditoría de sobrantes/faltantes."""
         active_box = CashierService.verify_active_box(db, cashier_id)
 
         # Suma de pagos procesados hoy en esta caja
-        today_payments = db.query(func.sum(Payment.amount)).filter(
+        today_payments = db.query(func.sum(Payment.amount + Payment.surcharge)).filter(
             Payment.cashier_id == cashier_id,
             Payment.created_at >= active_box.opened_at
         ).scalar() or 0.0
@@ -83,23 +101,33 @@ class CashierService:
         }
 
     @staticmethod
-    def monthly_closure(db: Session, year: int, month: int) -> dict:
-        """Genera el Cierre de Caja Mensual sumando todas las cajas cerradas del mes."""
-        total_monthly = db.query(func.sum(CashRegister.real_physical_amount)).filter(
+    def monthly_closure(db: Session, year: int, month: int, cashier_id: int = None) -> dict:
+        """Resume cajas cerradas, cobros y descuadres de un mes."""
+        register_filter = [
             func.extract('year', CashRegister.closed_at) == year,
             func.extract('month', CashRegister.closed_at) == month,
-            CashRegister.is_open == False
-        ).scalar() or 0.0
+            CashRegister.is_open == False,
+        ]
+        payment_filter = [
+            func.extract('year', Payment.created_at) == year,
+            func.extract('month', Payment.created_at) == month,
+        ]
+        if cashier_id is not None:
+            register_filter.append(CashRegister.cashier_id == cashier_id)
+            payment_filter.append(Payment.cashier_id == cashier_id)
 
-        total_diff = db.query(func.sum(CashRegister.difference)).filter(
-            func.extract('year', CashRegister.closed_at) == year,
-            func.extract('month', CashRegister.closed_at) == month,
-            CashRegister.is_open == False
-        ).scalar() or 0.0
+        registers = db.query(CashRegister).filter(*register_filter).all()
+        collected = db.query(func.sum(Payment.amount + Payment.surcharge)).filter(*payment_filter).scalar() or 0
+        physical_total = sum(float(register.real_physical_amount or 0) for register in registers)
+        expected_total = sum(float(register.system_expected_amount or 0) for register in registers)
+        total_diff = sum(float(register.difference or 0) for register in registers)
 
         return {
             "periodo": f"{year}-{month:02d}",
-            "total_recaudado_mes": float(total_monthly),
-            "total_descuadres_mes": float(total_diff),
-            "mensaje": f"Arqueo mensual completado. Recaudación total acumulada: ${total_monthly:.2f}"
+            "cajas_cerradas": len(registers),
+            "total_cobrado_mes": round(float(collected), 2),
+            "total_esperado_cajas": round(expected_total, 2),
+            "total_efectivo_contado": round(physical_total, 2),
+            "total_descuadres_mes": round(total_diff, 2),
+            "mensaje": f"Cierre mensual completado. Cobrado en pagos: ${float(collected):.2f}",
         }
