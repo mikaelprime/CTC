@@ -1,6 +1,21 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+
+# Sin esto, el logging de Python queda sin configurar: el "handler de
+# último recurso" que usa por defecto solo emite WARNING y ERROR, así que
+# cualquier logger.info() de la app (confirmaciones de envío de correo,
+# estudiantes sin email, etc.) se descarta en silencio y nunca aparece en
+# los logs de Render, aunque el código sí se haya ejecutado. force=True
+# asegura que esta configuración se aplique aunque algo (uvicorn, otro
+# import) ya le haya puesto un handler al logger raíz antes.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True,
+)
 from app.database.base import Base
 from app.database.database import engine
 from app.models.role import Role
