@@ -72,7 +72,10 @@ class CashierService:
             Payment.created_at >= active_box.opened_at
         ).scalar() or 0.0
 
-        expected_total = active_box.initial_amount + float(today_payments)
+        # initial_amount llega como Decimal (columna Numeric); today_payments
+        # también, salvo cuando no hay pagos y el "or 0.0" cae a un float.
+        # Todo a float aquí evita mezclar Decimal y float en la resta.
+        expected_total = float(active_box.initial_amount or 0) + float(today_payments)
         diff = round(physical_amount - expected_total, 2)
 
         # Exigir explicación si hay descuadre (Auditoría)
@@ -92,7 +95,7 @@ class CashierService:
         db.commit()
         return {
             "status": "Caja Cerrada Exitosamente",
-            "monto_inicial": active_box.initial_amount,
+            "monto_inicial": float(active_box.initial_amount or 0),
             "cobrado_sistema": float(today_payments),
             "esperado_total": expected_total,
             "reportado_fisico": physical_amount,

@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.student import Student
 from app.models.diploma import Diploma
 from app.models.schedule import Schedule
+from app.models.institution_config import InstitutionConfig
 
 from dotenv import load_dotenv
 

@@ -1,13 +1,21 @@
 import calendar
-from datetime import date, timedelta
-from typing import Dict, Any, List
-from sqlalchemy.orm import Session
+from datetime import date
+from typing import Any, List
+from sqlalchemy.orm import Session, joinedload
 from app.models.enrollment import Enrollment
 from app.models.diploma import Diploma
 from app.services.email_service import EmailService
-# Asegúrate de importar tu modelo y esquema de Enrollment
-# from app.models.enrollment import Enrollment 
-# from app.schemas.enrollment import EnrollmentCreate
+
+# `EnrollmentResponse` serializa student/diploma/schedule anidados. Sin
+# joinedload, SQLAlchemy carga cada relación de forma perezosa: con 20-30
+# matrículas eso son cientos de consultas individuales (problema N+1) y el
+# endpoint tarda varios segundos en vez de decenas de milisegundos.
+_WITH_RELATIONS = (
+    joinedload(Enrollment.student),
+    joinedload(Enrollment.diploma),
+    joinedload(Enrollment.schedule),
+)
+
 
 class EnrollmentService:
 
@@ -15,7 +23,7 @@ class EnrollmentService:
 
     @staticmethod
     def get_all(db: Session) -> List[Any]:
-        return db.query(Enrollment).all()
+        return db.query(Enrollment).options(*_WITH_RELATIONS).all()
 
     @staticmethod
     def create(db: Session, enrollment: Any) -> Any:
@@ -46,7 +54,12 @@ class EnrollmentService:
 
     @staticmethod
     def get_by_id(db: Session, enrollment_id: int) -> Any:
-        return db.query(Enrollment).filter(Enrollment.id == enrollment_id).first()
+        return (
+            db.query(Enrollment)
+            .options(*_WITH_RELATIONS)
+            .filter(Enrollment.id == enrollment_id)
+            .first()
+        )
 
     @staticmethod
     def delete(db: Session, enrollment_id: int) -> Any:
@@ -55,49 +68,3 @@ class EnrollmentService:
             db.delete(db_enrollment)
             db.commit()
         return db_enrollment
-
-    # --- TUS MÉTODOS EXISTENTES DE CÁLCULO ---
-
-    @staticmethod
-    def calculate_next_payment_date(start_date: date) -> date:
-        """
-        Calcula la fecha exacta del próximo pago a 28 días
-        a partir de la Fecha de Inicio de Clases.
-        """
-        return start_date + timedelta(days=28)
-
-    @staticmethod
-    def check_payment_status(last_payment_date: date, current_date: date = None) -> Dict[str, Any]:
-        """
-        Determina el estado del pago.
-        """
-        if current_date is None:
-            current_date = date.today()
-
-        due_date = last_payment_date + timedelta(days=28)
-        days_remaining = (due_date - current_date).days
-
-        if days_remaining < 0:
-            return {
-                "status": "Pendiente",
-                "days_overdue": abs(days_remaining),
-                "apply_late_fee": True,
-                "late_fee_amount": 3.00,
-                "message": "Pago vencido. Se requiere aplicar recargo de $3.00."
-            }
-        elif days_remaining <= 7:
-            return {
-                "status": "Próximo a Vencer",
-                "days_remaining": days_remaining,
-                "apply_late_fee": False,
-                "late_fee_amount": 0.0,
-                "message": f"Alerta: El pago vence en {days_remaining} días. Notificar al alumno."
-            }
-        else:
-            return {
-                "status": "Al día",
-                "days_remaining": days_remaining,
-                "apply_late_fee": False,
-                "late_fee_amount": 0.0,
-                "message": "Pago al día."
-            }

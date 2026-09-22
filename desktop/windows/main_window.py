@@ -1,3 +1,4 @@
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from api_client import api
+from widgets.animated_button import AnimatedButton
 from window_utils import show_maximized_on_current_screen
 from pages.cashiers_page import CashiersPage
 from pages.dashboard_page import DashboardPage
@@ -70,25 +72,39 @@ class MainWindow(QMainWindow):
         if (api.user_role or "").upper() in {"CAJERO", "CASHIER"}:
             visible_items = [item for item in NAV_ITEMS if item[0] not in ADMIN_ONLY]
 
-        for index, (label, page_cls) in enumerate(visible_items):
-            btn = QPushButton(label)
+        # Las páginas hacen llamadas a la API apenas se crean. Si se instancian
+        # todas de una vez al iniciar sesión, cada una bloquea la ventana
+        # principal por turnos (peor aún si el backend gratuito de Render
+        # estaba dormido). Se crean de forma perezosa, solo al navegar a ellas.
+        self._page_classes = [page_cls for _, page_cls in visible_items]
+        self._page_widgets: dict[int, QWidget] = {}
+        for index in range(len(self._page_classes)):
+            self.stack.addWidget(QWidget())
+
+        for index, (label, _page_cls) in enumerate(visible_items):
+            btn = AnimatedButton(label)
             btn.setObjectName("NavButton")
             btn.setCheckable(True)
             btn.clicked.connect(lambda _checked=False, i=index: self.switch_page(i))
             self.nav_group.addButton(btn, index)
             sidebar_layout.addWidget(btn)
-            self.stack.addWidget(page_cls())
 
         sidebar_layout.addStretch()
 
-        display_row = QHBoxLayout()
+        # En columna, no en fila: dos botones de texto largo no caben uno junto
+        # al otro en un sidebar de 220px sin cortarse.
+        display_col = QVBoxLayout()
+        display_col.setSpacing(6)
         theme_btn = QPushButton("Modo claro")
         theme_btn.clicked.connect(lambda: self.toggle_theme(theme_btn))
-        fullscreen_btn = QPushButton("Pantalla completa")
-        fullscreen_btn.clicked.connect(lambda: self.toggle_fullscreen(fullscreen_btn))
-        display_row.addWidget(theme_btn)
-        display_row.addWidget(fullscreen_btn)
-        sidebar_layout.addLayout(display_row)
+        self.fullscreen_btn = QPushButton("Pantalla completa")
+        self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
+        display_col.addWidget(theme_btn)
+        display_col.addWidget(self.fullscreen_btn)
+        sidebar_layout.addLayout(display_col)
+
+        # F11 además del botón: es el atajo estándar en Windows para esto.
+        QShortcut(QKeySequence("F11"), self, activated=self.toggle_fullscreen)
 
         user_label = QLabel(api.user_email or "")
         user_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
@@ -111,15 +127,24 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(content_wrapper, stretch=1)
 
         self.nav_group.button(0).setChecked(True)
-        self.stack.setCurrentIndex(0)
+        self.switch_page(0)
 
     def show_on_current_screen(self) -> None:
         show_maximized_on_current_screen(self)
 
     def switch_page(self, index: int) -> None:
+        just_created = False
+        if index not in self._page_widgets:
+            widget = self._page_classes[index]()
+            self._page_widgets[index] = widget
+            self.stack.removeWidget(self.stack.widget(index))
+            self.stack.insertWidget(index, widget)
+            just_created = True
         self.stack.setCurrentIndex(index)
-        widget = self.stack.currentWidget()
-        if hasattr(widget, "reload"):
+        widget = self._page_widgets[index]
+        # El constructor de cada página ya hace su propia carga inicial;
+        # solo se recarga aquí en visitas posteriores.
+        if not just_created and hasattr(widget, "reload"):
             widget.reload()
 
     def handle_logout(self) -> None:
@@ -139,10 +164,10 @@ class MainWindow(QMainWindow):
         mode = self.theme_manager.toggle()
         button.setText("Modo oscuro" if mode == "light" else "Modo claro")
 
-    def toggle_fullscreen(self, button: QPushButton) -> None:
+    def toggle_fullscreen(self) -> None:
         if self.isFullScreen():
             self.showMaximized()
-            button.setText("Pantalla completa")
+            self.fullscreen_btn.setText("Pantalla completa")
         else:
             self.showFullScreen()
-            button.setText("Salir pantalla completa")
+            self.fullscreen_btn.setText("Salir pantalla completa")

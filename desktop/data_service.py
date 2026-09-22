@@ -33,14 +33,32 @@ def get_schedules() -> list[dict]:
     return api.get("/schedules/") or []
 
 
-def kpis_generales() -> dict:
-    students = get_students()
-    payments = get_payments()
-    enrollments = get_enrollments()
+def load_dashboard_data() -> dict:
+    """Trae todo lo que necesita el panel en una sola ronda de peticiones.
+
+    Antes cada función de abajo (kpis, ingresos, distribución, actividad)
+    volvía a pedir /payments/ y /enrollments/ por su cuenta: un reload del
+    panel disparaba la misma petición 3 veces. Ahora se trae una vez y se
+    reparte, además de correr en un hilo aparte para no congelar la ventana.
+    """
+    return {
+        "students": get_students(),
+        "payments": get_payments(),
+        "enrollments": get_enrollments(),
+    }
+
+
+def kpis_generales(data: dict) -> dict:
+    students = data["students"]
+    payments = data["payments"]
+    enrollments = data["enrollments"]
 
     today = date.today()
 
-    estudiantes_activos = sum(1 for s in students if s.get("is_active"))
+    # El modelo de estudiante no tiene un campo is_active (no hay baja lógica,
+    # solo eliminación), así que todo estudiante devuelto por la API cuenta
+    # como activo.
+    estudiantes_activos = len(students)
 
     inscripciones_mes = sum(
         1
@@ -70,8 +88,8 @@ def kpis_generales() -> dict:
     }
 
 
-def ingresos_mensuales() -> dict:
-    payments = get_payments()
+def ingresos_mensuales(data: dict) -> dict:
+    payments = data["payments"]
 
     today = date.today()
     months: list[tuple[int, int]] = []
@@ -104,8 +122,8 @@ def ingresos_mensuales() -> dict:
     }
 
 
-def distribucion_academica() -> dict:
-    enrollments = get_enrollments()
+def distribucion_academica(data: dict) -> dict:
+    enrollments = data["enrollments"]
 
     counts: dict[str, int] = {}
     for e in enrollments:
@@ -115,9 +133,9 @@ def distribucion_academica() -> dict:
     return {"programas": list(counts.keys()), "estudiantes": list(counts.values())}
 
 
-def actividad_reciente(limit: int = 8) -> list[dict]:
-    payments = get_payments()
-    enrollments_by_id = {e["id"]: e for e in get_enrollments()}
+def actividad_reciente(data: dict, limit: int = 8) -> list[dict]:
+    payments = data["payments"]
+    enrollments_by_id = {e["id"]: e for e in data["enrollments"]}
 
     today = date.today()
     recientes = sorted(payments, key=lambda p: p["payment_date"], reverse=True)[:limit]

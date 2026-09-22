@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from api_client import api
+from api_client import ApiError, api
 from widgets.crud_page import Column, CrudPage, Field
 
 
@@ -39,6 +39,15 @@ def _delete(row: dict):
 
 class EnrollmentsPage(CrudPage):
     def __init__(self, parent=None):
+        # El ciclo de cobro es configurable desde Configuración (ya no son
+        # siempre 28 días fijos); se trae una sola vez aquí, no por fila,
+        # para no convertir esta tabla en una petición HTTP por matrícula.
+        cycle_days = 28
+        try:
+            cycle_days = int(api.get("/config/")["payment_cycle_days"])
+        except (ApiError, KeyError, TypeError, ValueError):
+            pass
+
         columns = [
             Column("id", "ID"),
             Column("student", "Estudiante", formatter=lambda r: r["student"]["full_name"]),
@@ -46,9 +55,13 @@ class EnrollmentsPage(CrudPage):
             Column("schedule", "Turno", formatter=lambda r: r["schedule"]["name"]),
             Column("start_date", "Inicio"),
             Column("end_date", "Fin"),
-            Column("next_payment", "Próximo pago", formatter=lambda r: (
-                (date.fromisoformat(r["start_date"]) + timedelta(days=28)).isoformat()
-            )),
+            Column(
+                "next_payment",
+                "Próximo pago (estimado)",
+                formatter=lambda r: (
+                    date.fromisoformat(r["start_date"]) + timedelta(days=cycle_days)
+                ).isoformat(),
+            ),
             Column("status", "Estado"),
         ]
         create_spec = [

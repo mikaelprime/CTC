@@ -126,6 +126,14 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend pytest tests -q
 ```
 
+La lógica de agregación del panel (`desktop/data_service.py`) tiene pruebas
+propias que no necesitan backend ni ventanas:
+
+```powershell
+& .venv\Scripts\python.exe -m pip install -r desktop\requirements-dev.txt
+& .venv\Scripts\python.exe -m pytest desktop\tests -q
+```
+
 La aplicación desktop puede validarse sin mostrar ventanas con:
 
 ```powershell

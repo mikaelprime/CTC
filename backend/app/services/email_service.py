@@ -1,9 +1,12 @@
+import logging
 import smtplib
 from datetime import timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class EmailService:
@@ -83,15 +86,6 @@ class EmailService:
         EmailService._send_email(student.email, f"Confirmación de inscripción CTC #{enrollment.id}", html, True)
 
     @staticmethod
-    def send_html_ticket(student_email, student_name, concept, amount, cash_received, change, receipt_id):
-        html = f"<html><body><h2>CTC El Salvador</h2><p>Estudiante: {student_name}</p><p>Concepto: {concept}</p><p>Total: ${amount:.2f}</p><p>Efectivo: ${cash_received:.2f}</p><p>Cambio: ${change:.2f}</p><p>Comprobante: {receipt_id}</p></body></html>"
-        EmailService._send_email(student_email, f"Comprobante de pago #{receipt_id} - CTC", html, True)
-
-    @staticmethod
-    def generate_thermal_ticket_text(student_name, concept, amount, cash_received, change, receipt_id):
-        return f"CTC EL SALVADOR\nTICKET: {receipt_id}\nCLIENTE: {student_name}\nCONCEPTO: {concept}\nTOTAL: ${amount:.2f}\nEFECTIVO: ${cash_received:.2f}\nCAMBIO: ${change:.2f}\n"
-
-    @staticmethod
     def _send_email(to_email, subject, content, is_html=False):
         try:
             message = MIMEMultipart()
@@ -100,11 +94,11 @@ class EmailService:
             message["Subject"] = subject
             message.attach(MIMEText(content, "html" if is_html else "plain"))
             if not EmailService.SENDER_EMAIL or not EmailService.SENDER_PASSWORD:
-                print(f"[CORREO] SMTP no configurado; ticket preparado para {to_email}")
+                logger.info("SMTP no configurado; ticket preparado para %s", to_email)
                 return
             with smtplib.SMTP(EmailService.SMTP_SERVER, EmailService.SMTP_PORT, timeout=15) as smtp:
                 smtp.starttls()
                 smtp.login(EmailService.SENDER_EMAIL, EmailService.SENDER_PASSWORD)
                 smtp.send_message(message)
-        except Exception as exc:
-            print(f"[ERROR CORREO] {exc}")
+        except Exception:
+            logger.exception("No se pudo enviar el correo a %s", to_email)

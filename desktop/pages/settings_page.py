@@ -1,6 +1,7 @@
-from PySide6.QtWidgets import QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QMessageBox, QSpinBox, QVBoxLayout, QWidget
 
 from api_client import ApiError, api
+from widgets.animated_button import AnimatedButton
 
 
 class SettingsPage(QWidget):
@@ -31,7 +32,7 @@ class SettingsPage(QWidget):
         form.addRow("Ciclo de pago (días)", self.cycle_days)
         form.addRow("Avisar antes (días)", self.alert_days)
         layout.addLayout(form)
-        save = QPushButton("Guardar configuración")
+        save = AnimatedButton("Guardar configuración")
         save.setProperty("class", "primary")
         save.clicked.connect(self.save)
         layout.addWidget(save)

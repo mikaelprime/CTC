@@ -3,12 +3,22 @@ from datetime import date, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from app.core.runtime_config import get_institution_config
+from app.models.enrollment import Enrollment
 from app.models.payment import Payment
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.enrollment_repository import EnrollmentRepository
 from app.services.email_service import EmailService
 
 class PaymentService:
+
+    @staticmethod
+    def _cycle_days(db: Session) -> int:
+        return int(get_institution_config(db).payment_cycle_days)
+
+    @staticmethod
+    def _late_fee(db: Session) -> Decimal:
+        return Decimal(str(get_institution_config(db).late_fee))
 
     @staticmethod
     def _add_months(base_date: date, months: int) -> date:
@@ -38,6 +48,15 @@ class PaymentService:
 
     @staticmethod
     def collect(db: Session, data, cashier_id: int | None = None):
+        # Bloquea la fila de la matrícula hasta el commit: si dos cobros
+        # llegan casi al mismo tiempo para la misma matrícula (dos cajeros,
+        # o un doble clic que dispara dos peticiones), el segundo espera a
+        # que el primero termine en vez de leer el mismo "próximo pago
+        # pendiente" y generar dos cuotas duplicadas.
+        locked = db.query(Enrollment.id).filter(Enrollment.id == data.enrollment_id).with_for_update().first()
+        if not locked:
+            raise HTTPException(status_code=404, detail="La matrícula no existe")
+
         enrollment = EnrollmentRepository.get_by_id(db, data.enrollment_id)
         if not enrollment:
             raise HTTPException(status_code=404, detail="La matrícula no existe")
@@ -52,12 +71,13 @@ class PaymentService:
             .order_by(Payment.due_date.asc())
             .first()
         )
+        cycle_days = PaymentService._cycle_days(db)
         last_payment = PaymentRepository.get_last_by_enrollment(db, enrollment.id)
         first_due = pending_payment.due_date if pending_payment else (
-            last_payment.due_date + timedelta(days=28)
+            last_payment.due_date + timedelta(days=cycle_days)
             if last_payment else enrollment.start_date
         )
-        surcharge = Decimal("3.00") if first_due < today else Decimal("0.00")
+        surcharge = PaymentService._late_fee(db) if first_due < today else Decimal("0.00")
         monthly_amount = Decimal(str(enrollment.diploma.monthly_fee))
         amount = monthly_amount * data.months
         total = amount + surcharge
@@ -66,7 +86,7 @@ class PaymentService:
 
         payments = []
         for index in range(data.months):
-            due_date = first_due + timedelta(days=28 * index)
+            due_date = first_due + timedelta(days=cycle_days * index)
             payments.append(Payment(
                 enrollment_id=enrollment.id,
                 cashier_id=cashier_id,
@@ -84,7 +104,7 @@ class PaymentService:
         created = PaymentRepository.create_many(db, payments)
         enrollment.status = "ACTIVA"
         db.commit()
-        next_payment = created[-1].due_date + timedelta(days=28)
+        next_payment = created[-1].due_date + timedelta(days=cycle_days)
         EmailService.send_payment_confirmation(
             created[0], next_payment_date=next_payment, months_paid=data.months
         )
@@ -115,10 +135,10 @@ class PaymentService:
         )
         last = PaymentRepository.get_last_by_enrollment(db, enrollment_id)
         due_date = pending.due_date if pending else (
-            last.due_date + timedelta(days=28) if last else enrollment.start_date
+            last.due_date + timedelta(days=PaymentService._cycle_days(db)) if last else enrollment.start_date
         )
         today = date.today()
-        surcharge = Decimal("3.00") if due_date < today else Decimal("0.00")
+        surcharge = PaymentService._late_fee(db) if due_date < today else Decimal("0.00")
         return {
             "enrollment_id": enrollment_id,
             "student_name": enrollment.student.full_name,

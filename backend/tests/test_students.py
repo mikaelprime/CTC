@@ -47,15 +47,14 @@ def test_create_student():
             "full_name": "Pytest Student",
             "birth_date": "2007-01-01",
             "email": email,
-            "phone": "7777-7777",
+            "contact_phone": "7777-7777",
             "address": "Santa Ana",
-            "education_level": "Bachillerato",
-            "guardian_name": "Padre Pytest",
-            "guardian_dui": "01090300-8",
-            "guardian_relationship": "Padre",
-            "guardian_email": "padre@ctc.edu.sv",
-            "guardian_whatsapp": "7777-8888",
-            "observations": "Creado automáticamente"
+            "schooling": "Bachillerato",
+            "responsible_name": "Padre Pytest",
+            "responsible_dui": "01090300-8",
+            "responsible_kinship": "Padre",
+            "responsible_email": "padre@ctc.edu.sv",
+            "responsible_whatsapp": "7777-8888",
         }
     )
 
@@ -66,6 +65,11 @@ def test_create_student():
     assert "id" in data
     assert data["full_name"] == "Pytest Student"
     assert data["email"] == email
+    # Los datos del responsable deben persistir tal cual se enviaron,
+    # no descartarse silenciosamente por un esquema desalineado.
+    assert data["contact_phone"] == "7777-7777"
+    assert data["responsible_name"] == "Padre Pytest"
+    assert data["responsible_dui"] == "01090300-8"
 
 def test_student_not_found():
     response = client.get("/students/9999999999", headers=auth_headers())
@@ -81,16 +85,20 @@ def test_create_student_invalid_email():
             "full_name": "Error Test",
             "birth_date": "2007-01-01",
             "email": "correo-invalido",
-            "phone": "7777-7777",
+            "contact_phone": "7777-7777",
             "address": "Santa Ana",
-            "education_level": "Bachillerato",
-            "guardian_name": "Padre",
-            "guardian_dui": "11111111-1",
-            "guardian_relationship": "Padre",
-            "guardian_email": "correo",
-            "guardian_whatsapp": "7777-7777",
-            "observations": ""
+            "schooling": "Bachillerato",
+            "responsible_name": "Padre",
+            "responsible_dui": "11111111-1",
+            "responsible_kinship": "Padre",
+            "responsible_email": "correo",
+            "responsible_whatsapp": "7777-7777",
         }
     )
 
     assert response.status_code == 422
+
+def test_students_requires_auth():
+    response = client.get("/students/")
+
+    assert response.status_code == 401

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.auth.jwt_handler import create_access_token
 from app.auth.security import verify_password
+from app.core.rate_limit import register_failure, register_success, seconds_until_retry
 from app.database.database import get_db
 from app.models.user import User
 from app.schemas.auth_schema import LoginRequest, TokenResponse
@@ -10,15 +11,26 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/login", response_model=TokenResponse)
 def login(credentials: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == str(credentials.email).lower()).first()
+    email = str(credentials.email).lower()
+
+    wait = seconds_until_retry(email)
+    if wait > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Demasiados intentos fallidos. Intenta de nuevo en {wait // 60 + 1} minuto(s).",
+        )
+
+    user = db.query(User).filter(User.email == email).first()
 
     if not user or not user.is_active or not verify_password(credentials.password, user.password):
+        register_failure(email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    register_success(email)
     access_token = create_access_token(data={
         "sub": user.email,
         "user_id": user.id,

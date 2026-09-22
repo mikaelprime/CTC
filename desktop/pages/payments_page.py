@@ -7,16 +7,16 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QComboBox,
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
 )
 
 from api_client import ApiError, api
+from widgets.animated_button import AnimatedButton
 from widgets.crud_page import Column, CrudPage, Field
+from widgets.effects import apply_card_shadow
 
 
 def _fetch():
@@ -92,7 +92,7 @@ class PaymentsPage(CrudPage):
             self._add_collect_button()
 
     def _add_collect_button(self):
-        button = QPushButton("Cobrar colegiatura")
+        button = AnimatedButton("Cobrar colegiatura")
         button.setProperty("class", "primary")
         button.clicked.connect(self.collect_payment)
         self.layout().insertWidget(3, button)
@@ -102,19 +102,20 @@ class PaymentsPage(CrudPage):
             return
         panel = QGroupBox("Caja del turno")
         panel.setObjectName("RegisterPanel")
+        apply_card_shadow(panel, blur=14, y_offset=6, alpha=55)
         row = QHBoxLayout(panel)
         self.register_status = QLabel("Comprobando caja...")
         self.register_status.setObjectName("RegisterStatus")
         row.addWidget(self.register_status)
         row.addStretch()
-        self.open_register_button = QPushButton("Abrir caja")
+        self.open_register_button = AnimatedButton("Abrir caja")
         self.open_register_button.setProperty("class", "primary")
         self.open_register_button.clicked.connect(self.open_register)
         row.addWidget(self.open_register_button)
-        self.close_register_button = QPushButton("Cerrar caja")
+        self.close_register_button = AnimatedButton("Cerrar caja")
         self.close_register_button.clicked.connect(self.close_register)
         row.addWidget(self.close_register_button)
-        self.monthly_button = QPushButton("Cierre mensual")
+        self.monthly_button = AnimatedButton("Cierre mensual")
         self.monthly_button.clicked.connect(self.show_monthly_close)
         row.addWidget(self.monthly_button)
         self.layout().insertWidget(2, panel)
@@ -297,33 +298,3 @@ class PaymentsPage(CrudPage):
         )
         QMessageBox.information(self, "Cierre diario y arqueo", summary)
         self.refresh_register()
-
-# Lista de precios de CTC El Salvador 
-PRICING_OPTIONS = {
-    "matricula": {
-        "Matrícula Regular": 20.00,
-        "Promo-Matrícula (50% OFF)": 10.00,
-        "Matrícula Gratis": 0.00
-    },
-    "colegiatura": {
-        "Plan Grupal": 25.00,
-        "Plan Privado": 55.00,
-        "Plan On-line": 70.00
-    },
-    "recargo_mora": 3.00 # Recargo por pasarse de 28 días
-}
-
-def calculate_cash_change(total_to_pay: float, cash_received: float) -> dict:
-    if cash_received < total_to_pay:
-        return {
-            "is_valid": False,
-            "change": 0.0,
-            "error": "El efectivo ingresado es menor al total a pagar."
-        }
-    
-    change = cash_received - total_to_pay
-    return {
-        "is_valid": True,
-        "change": round(change, 2),
-        "error": None
-    }

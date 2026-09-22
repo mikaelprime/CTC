@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -15,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from api_client import ApiError, api
+from widgets.animated_button import AnimatedButton
 from widgets.crud_page import Field, RecordDialog
 
 
@@ -29,7 +29,7 @@ class CashiersPage(QWidget):
         layout.addWidget(header)
         layout.addWidget(sub)
 
-        add_button = QPushButton("➕ Crear cajero")
+        add_button = AnimatedButton("➕ Crear cajero")
         add_button.setProperty("class", "primary")
         add_button.clicked.connect(self.create_cashier)
         layout.addWidget(add_button)
@@ -64,7 +64,7 @@ class CashiersPage(QWidget):
                 self.cashier_filter.addItem(cashier["full_name"], cashier["id"])
         except ApiError:
             pass
-        report_button = QPushButton("Actualizar cierre mensual")
+        report_button = AnimatedButton("Actualizar cierre mensual")
         report_button.clicked.connect(self.load_monthly_report)
         report_row.addWidget(QLabel("Mes"), 0, 0)
         report_row.addWidget(self.month, 0, 1)

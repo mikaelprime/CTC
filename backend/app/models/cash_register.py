@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, Numeric, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from app.database.base import Base
 
@@ -7,12 +7,14 @@ class CashRegister(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     cashier_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Saldos
-    initial_amount = Column(Float, default=0.0)      # Fondo inicial con el que abre caja
-    system_expected_amount = Column(Float, default=0.0) # Lo que el sistema calcula que vendió
-    real_physical_amount = Column(Float, default=0.0)   # Lo que el cajero contó físicamente
-    difference = Column(Float, default=0.0)            # Sobrante (+) o Faltante (-)
+
+    # Saldos. Numeric, no Float: son montos de dinero real que se auditan a
+    # centavo exacto, y el binario de punto flotante puede acumular error de
+    # redondeo entre estas cuatro columnas relacionadas.
+    initial_amount = Column(Numeric(10, 2), default=0)      # Fondo inicial con el que abre caja
+    system_expected_amount = Column(Numeric(10, 2), default=0) # Lo que el sistema calcula que vendió
+    real_physical_amount = Column(Numeric(10, 2), default=0)   # Lo que el cajero contó físicamente
+    difference = Column(Numeric(10, 2), default=0)            # Sobrante (+) o Faltante (-)
 
     # Auditoría (Mejora solicitada)
     audit_explanation = Column(String, nullable=True)  # Justificación obligatoria si hay descuadre

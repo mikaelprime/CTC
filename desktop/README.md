@@ -23,7 +23,7 @@ python desktop/main.py
 ```
 
 Inicia sesión con un usuario existente (el seed crea `admin@ctc.edu.sv` / `123456`,
-ver `database/seed/seed.py`).
+ver `backend/seed_data.py`).
 
 Por defecto la app apunta a `http://localhost:8000`. Para usar otra URL:
 

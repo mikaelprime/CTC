@@ -15,22 +15,25 @@ import requests
 def _load_api_url() -> str:
     configured = os.environ.get("API_BASE_URL")
     if configured:
-        return configured.rstrip("/")
+        return configured.strip().rstrip("/")
 
     config_path = Path(__file__).with_name("config.json")
     if config_path.exists():
         try:
             value = json.loads(config_path.read_text(encoding="utf-8")).get("api_base_url")
             if value:
-                return str(value).rstrip("/")
+                return str(value).strip().rstrip("/")
         except (OSError, json.JSONDecodeError):
             pass
 
-    return "http://localhost:8000"
+    return "https://ctc-backend-j3id.onrender.com"
 
 
 API_BASE_URL = _load_api_url()
-_TIMEOUT = 10
+_TIMEOUT = 20
+# El backend gratuito de Render se "duerme" tras un rato sin tráfico y puede
+# tardar hasta un minuto en despertar en la primera petición.
+_LOGIN_TIMEOUT = 60
 
 
 class ApiError(Exception):
@@ -47,6 +50,15 @@ class ApiClient:
     def is_authenticated(self) -> bool:
         return bool(self.token)
 
+    def ping(self, timeout: int = _LOGIN_TIMEOUT) -> bool:
+        """Verifica que el backend responda. Usado por la pantalla de carga
+        para saber si hay que esperar a que Render despierte el servicio."""
+        try:
+            resp = requests.get(f"{API_BASE_URL}/api/health", timeout=timeout)
+            return resp.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
+
     def logout(self) -> None:
         self.token = None
         self.user_email = None
@@ -58,7 +70,7 @@ class ApiClient:
             resp = requests.post(
                 f"{API_BASE_URL}/auth/login",
                 json={"email": email, "password": password},
-                timeout=_TIMEOUT,
+                timeout=_LOGIN_TIMEOUT,
             )
         except requests.exceptions.RequestException as exc:
             raise ApiError(f"No se pudo contactar al backend ({API_BASE_URL}): {exc}") from exc

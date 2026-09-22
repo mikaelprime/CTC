@@ -9,6 +9,7 @@ from app.auth.security import hash_password
 from app.database.session import get_db
 from app.models.role import Role
 from app.models.user import User
+from app.schemas.user_schema import CashierResponse
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
 
@@ -20,7 +21,7 @@ class CashierCreate(BaseModel):
     birth_date: date
 
 
-@router.post("/cashiers", status_code=status.HTTP_201_CREATED)
+@router.post("/cashiers", response_model=CashierResponse, status_code=status.HTTP_201_CREATED)
 def create_cashier(
     data: CashierCreate,
     db: Session = Depends(get_db),
@@ -45,10 +46,10 @@ def create_cashier(
     db.add(cashier)
     db.commit()
     db.refresh(cashier)
-    return {"id": cashier.id, "full_name": cashier.full_name, "email": cashier.email, "role": role.name}
+    return cashier
 
 
-@router.get("/cashiers")
+@router.get("/cashiers", response_model=list[CashierResponse])
 def list_cashiers(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),

@@ -2,7 +2,9 @@ from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QFormLayout, QGraphicsOpacityEffect, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
-from api_client import ApiError, api
+from api_client import api
+from widgets.animated_button import AnimatedButton
+from widgets.async_worker import AsyncWorker
 
 
 class LoginWindow(QWidget):
@@ -51,12 +53,12 @@ class LoginWindow(QWidget):
         form.addRow("Contraseña", self.password_input)
         card_layout.addLayout(form)
 
-        button = QPushButton("Iniciar sesión")
-        button.setObjectName("LoginButton")
-        button.setProperty("class", "primary")
-        button.clicked.connect(self.handle_login)
+        self.login_button = AnimatedButton("Iniciar sesión")
+        self.login_button.setObjectName("LoginButton")
+        self.login_button.setProperty("class", "primary")
+        self.login_button.clicked.connect(self.handle_login)
         card_layout.addSpacing(8)
-        card_layout.addWidget(button)
+        card_layout.addWidget(self.login_button)
 
         exit_button = QPushButton("Salir del programa")
         exit_button.setObjectName("LoginExitButton")
@@ -92,11 +94,29 @@ class LoginWindow(QWidget):
             QMessageBox.warning(self, "Validación", "Ingresa un correo válido y tu contraseña.")
             return
         self._submitting = True
-        try:
+        self.login_button.setEnabled(False)
+        self.login_button.setText("Conectando…")
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+
+        # La autenticación corre en un hilo aparte: si se hiciera en el hilo
+        # de la interfaz, Windows puede llegar a marcar la ventana como "(No
+        # responde)" mientras se espera al backend (hasta 60s si Render
+        # estaba dormido), aunque técnicamente siga funcionando.
+        def do_login():
             api.login(email, password)
-        except ApiError as exc:
-            self._submitting = False
-            QMessageBox.critical(self, "No se pudo iniciar sesión", str(exc))
-            return
+
+        worker = AsyncWorker(do_login, self)
+        self._login_worker = worker
+        worker.succeeded.connect(lambda _result: self._on_login_finished(success=True))
+        worker.failed.connect(lambda message: self._on_login_finished(success=False, message=message))
+        worker.start()
+
+    def _on_login_finished(self, success: bool, message: str = "") -> None:
         self._submitting = False
+        self.login_button.setEnabled(True)
+        self.login_button.setText("Iniciar sesión")
+        QApplication.restoreOverrideCursor()
+        if not success:
+            QMessageBox.critical(self, "No se pudo iniciar sesión", message)
+            return
         self.on_login_success()

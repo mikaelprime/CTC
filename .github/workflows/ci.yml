@@ -1,4 +1,4 @@
-name: CTC Backend CI
+name: CTC CI
 
 on:
     push:
@@ -15,9 +15,30 @@ jobs:
     backend:
         runs-on: ubuntu-latest
 
+        services:
+            postgres:
+                image: postgres:16
+                env:
+                    POSTGRES_USER: ctc
+                    POSTGRES_PASSWORD: ctc
+                    POSTGRES_DB: ctc_ci
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 10
+
         defaults:
             run:
                 working-directory: backend
+
+        env:
+            DATABASE_URL: postgresql://ctc:ctc@localhost:5432/ctc_ci
+            SECRET_KEY: ci-only-secret-key
+            ALGORITHM: HS256
+            ACCESS_TOKEN_EXPIRE_MINUTES: "60"
 
         steps:
         -   name: Descargar repositorio
@@ -35,3 +56,41 @@ jobs:
 
         -   name: Verificar sintaxis
             run: python -m compileall app
+
+        -   name: Aplicar migraciones
+            run: alembic upgrade head
+
+        -   name: Sembrar datos base (roles y usuarios de prueba)
+            run: python seed_data.py
+
+        -   name: Ejecutar pruebas
+            run: pytest tests -q
+
+    desktop:
+        runs-on: ubuntu-latest
+
+        defaults:
+            run:
+                working-directory: desktop
+
+        steps:
+        -   name: Descargar repositorio
+            uses: actions/checkout@v4
+
+        -   name: Instalar Python
+            uses: actions/setup-python@v5
+            with:
+                python-version: "3.12"
+
+        -   name: Instalar dependencias
+            run: |
+                python -m pip install --upgrade pip
+                pip install -r requirements-dev.txt
+
+        -   name: Verificar sintaxis
+            env:
+                QT_QPA_PLATFORM: offscreen
+            run: python -m compileall -q .
+
+        -   name: Ejecutar pruebas de lógica del panel
+            run: python -m pytest tests -q

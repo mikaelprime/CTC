@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from PySide6.QtCore import QDate, QTime, Qt
+from PySide6.QtCore import QDate, QTime, Qt, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from api_client import ApiError
+from widgets.animated_button import AnimatedButton
+from widgets.async_worker import AsyncWorker
 
 
 @dataclass
@@ -142,6 +144,16 @@ class CrudPage(QWidget):
         self.delete_fn = delete_fn
         self.empty_message = empty_message
         self._rows: list[dict] = []
+        self._search_cache: list[str] = []
+        self._load_worker: Optional[AsyncWorker] = None
+
+        # Recalcular y reconstruir la tabla en cada tecla se siente pesado con
+        # varias decenas de filas. Se espera una pausa corta antes de filtrar,
+        # igual que hacen la mayoría de buscadores.
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(200)
+        self._search_timer.timeout.connect(self._render_rows)
 
         layout = QVBoxLayout(self)
         header = QLabel(title)
@@ -154,14 +166,14 @@ class CrudPage(QWidget):
         toolbar = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Buscar por nombre, correo o cualquier dato...")
-        self.search_input.textChanged.connect(self._render_rows)
+        self.search_input.textChanged.connect(self._search_timer.start)
         toolbar.addWidget(self.search_input, stretch=1)
-        refresh_btn = QPushButton("⟳ Actualizar")
+        refresh_btn = AnimatedButton("⟳ Actualizar")
         refresh_btn.clicked.connect(self.reload)
         toolbar.addWidget(refresh_btn)
         toolbar.addStretch()
         if create_spec and create_fn:
-            add_btn = QPushButton(f"➕ {create_label}")
+            add_btn = AnimatedButton(f"➕ {create_label}")
             add_btn.setProperty("class", "primary")
             add_btn.clicked.connect(self.on_create)
             toolbar.addWidget(add_btn)
@@ -184,31 +196,58 @@ class CrudPage(QWidget):
         self.reload()
 
     def reload(self) -> None:
-        try:
-            self._rows = self.fetch_fn() or []
-            self.status_label.setText(self.empty_message if not self._rows else "")
-        except ApiError as exc:
-            QMessageBox.critical(self, "Error", str(exc))
-            self._rows = []
-            self.status_label.setText(str(exc))
+        # La petición corre en un hilo aparte para no congelar la ventana
+        # mientras se espera la respuesta del backend.
+        self.status_label.setText("Cargando…")
+        worker = AsyncWorker(self.fetch_fn, self)
+        self._load_worker = worker
+        worker.succeeded.connect(lambda rows: self._on_loaded(worker, rows))
+        worker.failed.connect(lambda message: self._on_load_failed(worker, message))
+        worker.start()
+
+    def _on_loaded(self, worker: AsyncWorker, rows) -> None:
+        if worker is not self._load_worker:
+            return  # una carga más reciente ya está en curso o terminó
+        self._rows = rows or []
+        self.status_label.setText(self.empty_message if not self._rows else "")
+        # El texto de búsqueda de cada fila se calcula una sola vez aquí en
+        # vez de en cada tecla presionada en el buscador.
+        self._search_cache = [self._search_text(row).lower() for row in self._rows]
+        self._render_rows()
+
+    def _on_load_failed(self, worker: AsyncWorker, message: str) -> None:
+        if worker is not self._load_worker:
+            return
+        QMessageBox.critical(self, "Error", message)
+        self._rows = []
+        self._search_cache = []
+        self.status_label.setText(message)
         self._render_rows()
 
     def _render_rows(self) -> None:
         query = self.search_input.text().strip().lower()
-        rows = [row for row in self._rows if not query or query in self._search_text(row).lower()]
-        self.table.setRowCount(len(rows))
-        self.table.verticalHeader().setDefaultSectionSize(40)
-        for r, row in enumerate(rows):
-            for c, col in enumerate(self.columns):
-                text = col.formatter(row) if col.formatter else str(row.get(col.key, ""))
-                item = QTableWidgetItem(text)
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(r, c, item)
-            if self.delete_fn:
-                btn = QPushButton("Eliminar")
-                btn.setStyleSheet("padding: 3px 10px;")
-                btn.clicked.connect(lambda _checked=False, row=row: self.on_delete(row))
-                self.table.setCellWidget(r, len(self.columns), btn)
+        rows = [
+            row
+            for row, haystack in zip(self._rows, self._search_cache)
+            if not query or query in haystack
+        ]
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(rows))
+            self.table.verticalHeader().setDefaultSectionSize(40)
+            for r, row in enumerate(rows):
+                for c, col in enumerate(self.columns):
+                    text = col.formatter(row) if col.formatter else str(row.get(col.key, ""))
+                    item = QTableWidgetItem(text)
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    self.table.setItem(r, c, item)
+                if self.delete_fn:
+                    btn = QPushButton("Eliminar")
+                    btn.setStyleSheet("padding: 3px 10px;")
+                    btn.clicked.connect(lambda _checked=False, row=row: self.on_delete(row))
+                    self.table.setCellWidget(r, len(self.columns), btn)
+        finally:
+            self.table.setUpdatesEnabled(True)
 
     def _search_text(self, value: Any) -> str:
         if isinstance(value, dict):
