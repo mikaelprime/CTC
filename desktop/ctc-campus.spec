@@ -12,6 +12,7 @@ hiddenimports = [
 
 datas = collect_data_files("matplotlib")
 datas.append((str(DESKTOP / "config.example.json"), "."))
+datas.append((str(DESKTOP / "assets" / "ctc_campus.ico"), "assets"))
 
 a = Analysis(
     [str(DESKTOP / "main.py")],
@@ -39,4 +40,5 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon=str(DESKTOP / "assets" / "ctc_campus.ico"),
 )

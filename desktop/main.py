@@ -4,6 +4,7 @@ import sys
 import traceback
 from pathlib import Path
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from theme_manager import ThemeManager
@@ -12,6 +13,14 @@ from windows.main_window import MainWindow
 from windows.splash_screen import SplashScreen
 
 logger = logging.getLogger("ctc_campus")
+
+
+def _asset_path(*parts: str) -> Path:
+    """Resuelve una ruta de assets tanto corriendo desde el código fuente
+    como empaquetado con PyInstaller (que descomprime los `datas` en una
+    carpeta temporal apuntada por sys._MEIPASS)."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base.joinpath(*parts)
 
 
 def _setup_logging() -> None:
@@ -68,6 +77,9 @@ def _install_global_error_handler() -> None:
 class App:
     def __init__(self):
         self.qapp = QApplication(sys.argv)
+        icon_path = _asset_path("assets", "ctc_campus.ico")
+        if icon_path.exists():
+            self.qapp.setWindowIcon(QIcon(str(icon_path)))
         self.theme_manager = ThemeManager(self.qapp)
         self.main_window = None
         self.login_window = None
