@@ -71,7 +71,7 @@ dormirse después de un período sin tráfico.
 5. En Render selecciona `New > Blueprint` y conecta el repositorio. Render leerá
 	`render.yaml` y creará `ctc-backend`.
 6. Configura en Render las variables privadas `DATABASE_URL`, `SECRET_KEY`,
-	`BREVO_API_KEY` y `EMAIL_FROM_ADDRESS`.
+	`MAILJET_API_KEY`, `MAILJET_API_SECRET` y `EMAIL_FROM_ADDRESS`.
 7. Prueba `https://TU-SERVICIO.onrender.com/api/health`.
 8. Edita `dist\CTC-Campus-release\config.json`:
 
@@ -103,21 +103,24 @@ Cambia estas contraseñas antes de usar el sistema fuera de desarrollo.
 
 ## Correo
 
-El envío de comprobantes usa la API HTTP de [Brevo](https://www.brevo.com/)
+El envío de comprobantes usa la API HTTP de [Mailjet](https://www.mailjet.com/)
 (no SMTP): los hosts gratuitos como Render bloquean las conexiones SMTP
 salientes para evitar spam, así que un socket a `smtp.gmail.com:587` falla
-con "Network is unreachable" sin importar las credenciales. La API de Brevo
+con "Network is unreachable" sin importar las credenciales. La API de Mailjet
 corre sobre HTTPS/443, que no se bloquea.
 
-1. Crea una cuenta gratuita en [Brevo](https://www.brevo.com/) (300
+1. Crea una cuenta gratuita en [Mailjet](https://www.mailjet.com/) (200
    correos/día gratis, sin necesitar un dominio propio).
-2. En `Senders, Domains & Dedicated IPs > Senders` verifica el correo desde
-   el que vas a enviar (puede ser tu correo personal).
-3. En `Settings > SMTP & API > API Keys` genera una API key.
+2. En `Account Settings > Sender addresses and domains > Add a sender
+   address` verifica el correo desde el que vas a enviar (puede ser tu
+   correo personal); Mailjet te manda un enlace de confirmación.
+3. En `Account Settings > API Key Management` copia tu `API Key` y `Secret
+   Key`.
 4. Configura en `.env`:
 
 	```env
-	BREVO_API_KEY=tu_api_key
+	MAILJET_API_KEY=tu_api_key
+	MAILJET_API_SECRET=tu_secret_key
 	EMAIL_FROM_ADDRESS=el_correo_que_verificaste
 	EMAIL_FROM_NAME=CTC El Salvador
 	```

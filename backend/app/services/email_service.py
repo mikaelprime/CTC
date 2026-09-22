@@ -7,17 +7,18 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+MAILJET_API_URL = "https://api.mailjet.com/v3.1/send"
 
 
 class EmailService:
     # Render (y varios hosts gratuitos) bloquean las conexiones SMTP
     # salientes en el plan free para evitar abuso de spam: un socket crudo a
     # smtp.gmail.com:587 falla con "Network is unreachable" sin importar que
-    # las credenciales sean correctas. Brevo expone una API HTTP normal
+    # las credenciales sean correctas. Mailjet expone una API HTTP normal
     # (POST sobre HTTPS/443), que ningún host bloquea, así que el envío pasa
     # por ahí en vez de por smtplib.
-    API_KEY = (settings.BREVO_API_KEY or "").strip()
+    API_KEY = (settings.MAILJET_API_KEY or "").strip()
+    API_SECRET = (settings.MAILJET_API_SECRET or "").strip()
     SENDER_EMAIL = settings.EMAIL_FROM_ADDRESS
     SENDER_NAME = settings.EMAIL_FROM_NAME
 
@@ -93,30 +94,43 @@ class EmailService:
 
     @staticmethod
     def _send_email(to_email, subject, content, is_html=False):
-        if not EmailService.API_KEY or not EmailService.SENDER_EMAIL:
+        if not EmailService.API_KEY or not EmailService.API_SECRET or not EmailService.SENDER_EMAIL:
             logger.warning(
-                "Brevo no configurado (falta BREVO_API_KEY/EMAIL_FROM_ADDRESS); correo a %s no enviado.",
+                "Mailjet no configurado (falta MAILJET_API_KEY/MAILJET_API_SECRET/EMAIL_FROM_ADDRESS); "
+                "correo a %s no enviado.",
                 to_email,
             )
             return
         payload = {
-            "sender": {"email": EmailService.SENDER_EMAIL, "name": EmailService.SENDER_NAME},
-            "to": [{"email": to_email}],
-            "subject": subject,
-            ("htmlContent" if is_html else "textContent"): content,
+            "Messages": [
+                {
+                    "From": {"Email": EmailService.SENDER_EMAIL, "Name": EmailService.SENDER_NAME},
+                    "To": [{"Email": to_email}],
+                    "Subject": subject,
+                    ("HTMLPart" if is_html else "TextPart"): content,
+                }
+            ]
         }
         try:
             response = httpx.post(
-                BREVO_API_URL,
+                MAILJET_API_URL,
                 json=payload,
-                headers={"api-key": EmailService.API_KEY, "content-type": "application/json"},
+                auth=(EmailService.API_KEY, EmailService.API_SECRET),
                 timeout=15,
             )
             response.raise_for_status()
+            # Mailjet responde HTTP 200 incluso si un mensaje individual del
+            # batch falló (remitente sin verificar, destinatario inválido,
+            # etc.); el resultado real está en Messages[0].Status.
+            result = response.json()
+            message_status = (result.get("Messages") or [{}])[0].get("Status")
+            if message_status != "success":
+                logger.error("Mailjet no pudo enviar el correo a %s: %s", to_email, result)
+                return
             logger.info("Correo '%s' enviado a %s", subject, to_email)
         except httpx.HTTPStatusError as exc:
             logger.error(
-                "Brevo rechazó el correo a %s (HTTP %s): %s",
+                "Mailjet rechazó el correo a %s (HTTP %s): %s",
                 to_email, exc.response.status_code, exc.response.text,
             )
         except Exception:

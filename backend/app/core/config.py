@@ -10,12 +10,13 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
-    # Envío de correo vía la API HTTP de Brevo (no SMTP): Render bloquea las
+    # Envío de correo vía la API HTTP de Mailjet (no SMTP): Render bloquea las
     # conexiones SMTP salientes en su plan gratuito, así que un socket a
     # smtp.gmail.com falla con "Network is unreachable" sin importar las
-    # credenciales. La API HTTP de Brevo corre sobre HTTPS/443, que ningún
-    # host bloquea. Ver https://app.brevo.com/settings/keys/api.
-    BREVO_API_KEY: str = ""
+    # credenciales. La API HTTP de Mailjet corre sobre HTTPS/443, que ningún
+    # host bloquea. Ver https://app.mailjet.com/account/apikeys.
+    MAILJET_API_KEY: str = ""
+    MAILJET_API_SECRET: str = ""
     EMAIL_FROM_ADDRESS: str = ""
     EMAIL_FROM_NAME: str = "CTC El Salvador"
 
