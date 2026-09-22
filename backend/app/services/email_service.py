@@ -12,8 +12,13 @@ logger = logging.getLogger(__name__)
 class EmailService:
     SMTP_SERVER = settings.SMTP_HOST
     SMTP_PORT = settings.SMTP_PORT
+    SMTP_USER = settings.SMTP_USER
     SENDER_EMAIL = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
-    SENDER_PASSWORD = settings.SMTP_PASSWORD
+    # Las contraseñas de aplicación de Gmail se muestran con espacios
+    # ("xxxx xxxx xxxx xxxx") para que se lean mejor; si alguien las copia tal
+    # cual a la variable de entorno, .strip() evita que ese detalle de
+    # presentación rompa el login SMTP.
+    SENDER_PASSWORD = (settings.SMTP_PASSWORD or "").strip()
 
     @staticmethod
     def send_payment_confirmation(payment, next_payment_date=None, months_paid=1):
@@ -87,18 +92,32 @@ class EmailService:
 
     @staticmethod
     def _send_email(to_email, subject, content, is_html=False):
+        # Credenciales de autenticación SMTP: pueden ser una cuenta distinta
+        # a la que aparece como remitente (SMTP_FROM_EMAIL), así que se
+        # inicia sesión con SMTP_USER, no con SENDER_EMAIL.
+        login_user = EmailService.SMTP_USER or EmailService.SENDER_EMAIL
+        if not login_user or not EmailService.SENDER_PASSWORD:
+            logger.warning(
+                "SMTP no configurado (faltan SMTP_USER/SMTP_PASSWORD); correo a %s no enviado.",
+                to_email,
+            )
+            return
         try:
             message = MIMEMultipart()
             message["From"] = EmailService.SENDER_EMAIL
             message["To"] = to_email
             message["Subject"] = subject
             message.attach(MIMEText(content, "html" if is_html else "plain"))
-            if not EmailService.SENDER_EMAIL or not EmailService.SENDER_PASSWORD:
-                logger.info("SMTP no configurado; ticket preparado para %s", to_email)
-                return
             with smtplib.SMTP(EmailService.SMTP_SERVER, EmailService.SMTP_PORT, timeout=15) as smtp:
                 smtp.starttls()
-                smtp.login(EmailService.SENDER_EMAIL, EmailService.SENDER_PASSWORD)
+                smtp.login(login_user, EmailService.SENDER_PASSWORD)
                 smtp.send_message(message)
+            logger.info("Correo '%s' enviado a %s", subject, to_email)
+        except smtplib.SMTPAuthenticationError:
+            logger.exception(
+                "Autenticación SMTP rechazada para %s. Revisa SMTP_USER/SMTP_PASSWORD "
+                "(para Gmail debe ser una contraseña de aplicación, no la del correo).",
+                login_user,
+            )
         except Exception:
             logger.exception("No se pudo enviar el correo a %s", to_email)
