@@ -1,24 +1,25 @@
 import logging
-import smtplib
 from datetime import timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+
+import httpx
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
 
 class EmailService:
-    SMTP_SERVER = settings.SMTP_HOST
-    SMTP_PORT = settings.SMTP_PORT
-    SMTP_USER = settings.SMTP_USER
-    SENDER_EMAIL = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
-    # Las contraseñas de aplicación de Gmail se muestran con espacios
-    # ("xxxx xxxx xxxx xxxx") para que se lean mejor; si alguien las copia tal
-    # cual a la variable de entorno, .strip() evita que ese detalle de
-    # presentación rompa el login SMTP.
-    SENDER_PASSWORD = (settings.SMTP_PASSWORD or "").strip()
+    # Render (y varios hosts gratuitos) bloquean las conexiones SMTP
+    # salientes en el plan free para evitar abuso de spam: un socket crudo a
+    # smtp.gmail.com:587 falla con "Network is unreachable" sin importar que
+    # las credenciales sean correctas. Brevo expone una API HTTP normal
+    # (POST sobre HTTPS/443), que ningún host bloquea, así que el envío pasa
+    # por ahí en vez de por smtplib.
+    API_KEY = (settings.BREVO_API_KEY or "").strip()
+    SENDER_EMAIL = settings.EMAIL_FROM_ADDRESS
+    SENDER_NAME = settings.EMAIL_FROM_NAME
 
     @staticmethod
     def send_payment_confirmation(payment, next_payment_date=None, months_paid=1):
@@ -92,32 +93,31 @@ class EmailService:
 
     @staticmethod
     def _send_email(to_email, subject, content, is_html=False):
-        # Credenciales de autenticación SMTP: pueden ser una cuenta distinta
-        # a la que aparece como remitente (SMTP_FROM_EMAIL), así que se
-        # inicia sesión con SMTP_USER, no con SENDER_EMAIL.
-        login_user = EmailService.SMTP_USER or EmailService.SENDER_EMAIL
-        if not login_user or not EmailService.SENDER_PASSWORD:
+        if not EmailService.API_KEY or not EmailService.SENDER_EMAIL:
             logger.warning(
-                "SMTP no configurado (faltan SMTP_USER/SMTP_PASSWORD); correo a %s no enviado.",
+                "Brevo no configurado (falta BREVO_API_KEY/EMAIL_FROM_ADDRESS); correo a %s no enviado.",
                 to_email,
             )
             return
+        payload = {
+            "sender": {"email": EmailService.SENDER_EMAIL, "name": EmailService.SENDER_NAME},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            ("htmlContent" if is_html else "textContent"): content,
+        }
         try:
-            message = MIMEMultipart()
-            message["From"] = EmailService.SENDER_EMAIL
-            message["To"] = to_email
-            message["Subject"] = subject
-            message.attach(MIMEText(content, "html" if is_html else "plain"))
-            with smtplib.SMTP(EmailService.SMTP_SERVER, EmailService.SMTP_PORT, timeout=15) as smtp:
-                smtp.starttls()
-                smtp.login(login_user, EmailService.SENDER_PASSWORD)
-                smtp.send_message(message)
+            response = httpx.post(
+                BREVO_API_URL,
+                json=payload,
+                headers={"api-key": EmailService.API_KEY, "content-type": "application/json"},
+                timeout=15,
+            )
+            response.raise_for_status()
             logger.info("Correo '%s' enviado a %s", subject, to_email)
-        except smtplib.SMTPAuthenticationError:
-            logger.exception(
-                "Autenticación SMTP rechazada para %s. Revisa SMTP_USER/SMTP_PASSWORD "
-                "(para Gmail debe ser una contraseña de aplicación, no la del correo).",
-                login_user,
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "Brevo rechazó el correo a %s (HTTP %s): %s",
+                to_email, exc.response.status_code, exc.response.text,
             )
         except Exception:
             logger.exception("No se pudo enviar el correo a %s", to_email)

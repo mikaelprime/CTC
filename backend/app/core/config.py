@@ -10,12 +10,14 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = ""
-    SMTP_FROM_NAME: str = "CTC"
+    # Envío de correo vía la API HTTP de Brevo (no SMTP): Render bloquea las
+    # conexiones SMTP salientes en su plan gratuito, así que un socket a
+    # smtp.gmail.com falla con "Network is unreachable" sin importar las
+    # credenciales. La API HTTP de Brevo corre sobre HTTPS/443, que ningún
+    # host bloquea. Ver https://app.brevo.com/settings/keys/api.
+    BREVO_API_KEY: str = ""
+    EMAIL_FROM_ADDRESS: str = ""
+    EMAIL_FROM_NAME: str = "CTC El Salvador"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

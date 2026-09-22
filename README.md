@@ -71,7 +71,7 @@ dormirse después de un período sin tráfico.
 5. En Render selecciona `New > Blueprint` y conecta el repositorio. Render leerá
 	`render.yaml` y creará `ctc-backend`.
 6. Configura en Render las variables privadas `DATABASE_URL`, `SECRET_KEY`,
-	`SMTP_USER`, `SMTP_PASSWORD` y `SMTP_FROM_EMAIL`.
+	`BREVO_API_KEY` y `EMAIL_FROM_ADDRESS`.
 7. Prueba `https://TU-SERVICIO.onrender.com/api/health`.
 8. Edita `dist\CTC-Campus-release\config.json`:
 
@@ -103,16 +103,24 @@ Cambia estas contraseñas antes de usar el sistema fuera de desarrollo.
 
 ## Correo
 
-Configura una cuenta SMTP en `.env`. Para Gmail usa una contraseña de aplicación:
+El envío de comprobantes usa la API HTTP de [Brevo](https://www.brevo.com/)
+(no SMTP): los hosts gratuitos como Render bloquean las conexiones SMTP
+salientes para evitar spam, así que un socket a `smtp.gmail.com:587` falla
+con "Network is unreachable" sin importar las credenciales. La API de Brevo
+corre sobre HTTPS/443, que no se bloquea.
 
-```env
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=tu_correo
-SMTP_PASSWORD=tu_contraseña_de_aplicacion
-SMTP_FROM_EMAIL=tu_correo
-SMTP_FROM_NAME=CTC El Salvador
-```
+1. Crea una cuenta gratuita en [Brevo](https://www.brevo.com/) (300
+   correos/día gratis, sin necesitar un dominio propio).
+2. En `Senders, Domains & Dedicated IPs > Senders` verifica el correo desde
+   el que vas a enviar (puede ser tu correo personal).
+3. En `Settings > SMTP & API > API Keys` genera una API key.
+4. Configura en `.env`:
+
+	```env
+	BREVO_API_KEY=tu_api_key
+	EMAIL_FROM_ADDRESS=el_correo_que_verificaste
+	EMAIL_FROM_NAME=CTC El Salvador
+	```
 
 Nunca publiques `.env` ni compartas sus credenciales.
 
