@@ -62,3 +62,46 @@ def test_update_diploma():
 
     assert response.status_code == 200
     assert response.json()["monthly_fee"] == 55
+
+
+def test_deleting_diploma_with_enrollments_is_rejected_not_a_500():
+    """Regresión: borrar un diplomado con estudiantes inscritos llegó a
+    devolver un 500 sin explicación y a veces arrastraba en cascada las
+    inscripciones y pagos de esos estudiantes. Debe rechazarse con un
+    mensaje claro, y el diplomado debe seguir existiendo."""
+    headers = auth_headers()
+    diploma = create_diploma().json()
+
+    student = client.post(
+        "/students/",
+        headers=headers,
+        json={"full_name": "Estudiante Dependencia", "email": f"dep-{uuid4().hex[:8]}@ctc.edu.sv"},
+    )
+    assert student.status_code == 200
+
+    schedule = client.post(
+        "/schedules/",
+        headers=headers,
+        json={"name": f"Turno Dependencia {uuid4().hex[:8]}", "start_time": "08:00:00", "end_time": "10:00:00"},
+    )
+    assert schedule.status_code == 200
+
+    from datetime import date
+
+    enrollment = client.post(
+        "/enrollments/",
+        headers=headers,
+        json={
+            "student_id": student.json()["id"],
+            "diploma_id": diploma["id"],
+            "schedule_id": schedule.json()["id"],
+            "enrollment_date": date.today().isoformat(),
+        },
+    )
+    assert enrollment.status_code == 200
+
+    response = client.delete(f"/diplomas/{diploma['id']}", headers=headers)
+    assert response.status_code == 409
+
+    still_there = client.get(f"/diplomas/{diploma['id']}", headers=headers)
+    assert still_there.status_code == 200

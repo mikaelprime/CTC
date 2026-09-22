@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from app.database.base import Base
 from app.database.database import engine
 from app.models.role import Role
@@ -33,6 +35,19 @@ app.include_router(cashier.router)
 app.include_router(config.router)
 app.include_router(users.router)
 app.include_router(reports.router)
+
+
+@app.exception_handler(IntegrityError)
+def handle_integrity_error(request: Request, exc: IntegrityError):
+    """Red de seguridad: si algún endpoint deja pasar un borrado/creación que
+    viola una restricción de la base de datos (por ejemplo, borrar un
+    registro que todavía tiene datos dependientes) sin validarlo antes, esto
+    evita que la persona vea un "Internal Server Error" sin explicación."""
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "La operación no se pudo completar porque hay datos relacionados que dependen de este registro."},
+    )
+
 
 @app.get("/")
 def root():

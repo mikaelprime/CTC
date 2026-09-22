@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import date
 from app.database.database import get_db
 from app.models.student import Student # Tu modelo actualizado con campos del responsable
+from app.models.enrollment import Enrollment
 from app.auth.dependencies import get_current_user
 
 router = APIRouter(
@@ -56,6 +57,12 @@ def delete_student(student_id: int, db: Session = Depends(get_db)):
     student = db.query(Student).filter(Student.id == student_id).first()
     if student is None:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    has_enrollments = db.query(Enrollment).filter(Enrollment.student_id == student_id).first()
+    if has_enrollments:
+        raise HTTPException(
+            status_code=409,
+            detail="No se puede eliminar: el estudiante tiene inscripciones registradas. Elimina esas inscripciones primero.",
+        )
     db.delete(student)
     db.commit()
     return {"message": "Estudiante eliminado correctamente"}

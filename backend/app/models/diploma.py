@@ -31,8 +31,10 @@ class Diploma(Base):
         onupdate=func.now()
     )
 
+    # Sin cascade delete a propósito: borrar un diplomado no debe arrastrar
+    # en silencio las inscripciones (y pagos) de los estudiantes que lo
+    # cursan. El service verifica esto explícitamente antes de borrar.
     enrollments = relationship(
-    "Enrollment",
-    back_populates="diploma",
-    cascade="all, delete-orphan"
+        "Enrollment",
+        back_populates="diploma",
     )
