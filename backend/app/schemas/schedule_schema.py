@@ -1,4 +1,5 @@
 from datetime import time
+from typing import Optional
 from pydantic import BaseModel
 from pydantic.config import ConfigDict
 
@@ -9,6 +10,16 @@ class ScheduleCreate(BaseModel):
     start_time: time
 
     end_time: time
+
+class ScheduleUpdate(BaseModel):
+
+    name: Optional[str] = None
+
+    start_time: Optional[time] = None
+
+    end_time: Optional[time] = None
+
+    active: Optional[bool] = None
 
 class ScheduleResponse(BaseModel):
 
