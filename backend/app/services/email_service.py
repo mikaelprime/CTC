@@ -26,6 +26,10 @@ class EmailService:
     def send_payment_confirmation(payment, next_payment_date=None, months_paid=1):
         student = payment.enrollment.student
         if not student.email:
+            logger.info(
+                "Estudiante #%s sin correo registrado; no se envía comprobante de pago #%s.",
+                student.id, payment.id,
+            )
             return
         next_date = next_payment_date or (payment.due_date + timedelta(days=28))
         html = f"""
@@ -61,6 +65,10 @@ class EmailService:
     def send_enrollment_confirmation(enrollment):
         student = enrollment.student
         if not student.email:
+            logger.info(
+                "Estudiante #%s sin correo registrado; no se envía confirmación de la inscripción #%s.",
+                student.id, enrollment.id,
+            )
             return
         next_payment = enrollment.start_date + timedelta(days=28)
         html = f"""
