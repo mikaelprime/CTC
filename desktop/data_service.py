@@ -88,13 +88,13 @@ def kpis_generales(data: dict) -> dict:
     }
 
 
-def ingresos_mensuales(data: dict) -> dict:
+def ingresos_mensuales(data: dict, count: int = 6) -> dict:
     payments = data["payments"]
 
     today = date.today()
     months: list[tuple[int, int]] = []
     y, m = today.year, today.month
-    for _ in range(6):
+    for _ in range(count):
         months.append((y, m))
         m -= 1
         if m == 0:

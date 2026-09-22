@@ -114,6 +114,19 @@ def test_ingresos_mensuales_splits_projected_and_collected_by_month():
     assert result["proyectado"][-1] == 150.00  # ambos pagos vencen este mes
 
 
+def test_ingresos_mensuales_respects_custom_window_size():
+    data = {
+        "payments": [
+            _payment(1, status="PAGADO", total="100.00", payment_date=TODAY.isoformat(), due_date=TODAY.isoformat()),
+        ],
+    }
+
+    result = data_service.ingresos_mensuales(data, count=12)
+
+    assert len(result["meses"]) == 12
+    assert result["cobrado"][-1] == 100.00
+
+
 def test_distribucion_academica_counts_students_per_program():
     data = {
         "enrollments": [

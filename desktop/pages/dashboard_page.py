@@ -23,6 +23,7 @@ from widgets.async_worker import AsyncWorker
 from widgets.chart_canvas import ChartCanvas
 from widgets.effects import apply_card_shadow
 from widgets.kpi_card import KpiCard
+from widgets.trend_chart import TrendChart
 
 
 class DashboardPage(QWidget):
@@ -113,6 +114,21 @@ class DashboardPage(QWidget):
 
         layout.addWidget(charts_container)
 
+        trend_box = QFrame()
+        trend_box.setObjectName("KpiCard")
+        apply_card_shadow(trend_box, blur=14, y_offset=6, alpha=60)
+        trend_layout = QVBoxLayout(trend_box)
+        trend_title = QLabel("Tendencia de Cobros (12 meses, interactivo)")
+        trend_title.setStyleSheet("font-weight: 600; border: none;")
+        trend_hint = QLabel("Pasa el mouse sobre la gráfica para ver el detalle de cada mes.")
+        trend_hint.setObjectName("PageSubtitle")
+        self.trend_chart = TrendChart()
+        self.trend_chart.setMinimumHeight(220)
+        trend_layout.addWidget(trend_title)
+        trend_layout.addWidget(trend_hint)
+        trend_layout.addWidget(self.trend_chart)
+        layout.addWidget(trend_box)
+
         act_label = QLabel("Registro de Actividad Reciente")
         act_label.setObjectName("PageSubtitle")
         layout.addWidget(act_label)
@@ -156,6 +172,7 @@ class DashboardPage(QWidget):
 
         k = data_service.kpis_generales(data)
         ingresos = data_service.ingresos_mensuales(data)
+        ingresos_anual = data_service.ingresos_mensuales(data, count=12)
         dist = data_service.distribucion_academica(data)
         actividad = data_service.actividad_reciente(data)
 
@@ -169,6 +186,9 @@ class DashboardPage(QWidget):
         self._draw_ingresos(ingresos)
         self._draw_distribucion(dist)
         self._fill_activity(actividad)
+        self.trend_chart.set_data(
+            ingresos_anual["meses"], ingresos_anual["cobrado"], ingresos_anual["proyectado"]
+        )
 
     def _style_axes(self, ax) -> None:
         ax.grid(axis="y", color=BORDER, linewidth=0.7, alpha=0.7)
