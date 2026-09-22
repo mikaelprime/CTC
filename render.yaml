@@ -16,14 +16,14 @@ services:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "480"
       - key: SMTP_HOST
-        sync: false
+        sync: true
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_USER
-        sync: false
+        sync: true
       - key: SMTP_PASSWORD
-        sync: false
+        sync: true
       - key: SMTP_FROM_EMAIL
-        sync: false
+        sync: true
       - key: SMTP_FROM_NAME
         value: CTC El Salvador
