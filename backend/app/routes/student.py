@@ -31,10 +31,40 @@ class StudentCreate(BaseModel):
     responsible_email: Optional[EmailStr] = None
     responsible_whatsapp: Optional[str] = None
 
+
+class StudentUpdate(BaseModel):
+    full_name: Optional[str] = None
+    age: Optional[int] = None
+    birth_date: Optional[date] = None
+    dui: Optional[str] = None
+    address: Optional[str] = None
+    email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = None
+    schooling: Optional[str] = None
+
+    responsible_name: Optional[str] = None
+    responsible_dui: Optional[str] = None
+    responsible_kinship: Optional[str] = None
+    responsible_email: Optional[EmailStr] = None
+    responsible_whatsapp: Optional[str] = None
+
+
 @router.post("/")
 def create_student(student: StudentCreate, db: Session = Depends(get_db)):
     db_student = Student(**student.model_dump())
     db.add(db_student)
+    db.commit()
+    db.refresh(db_student)
+    return db_student
+
+
+@router.put("/{student_id}")
+def update_student(student_id: int, student: StudentUpdate, db: Session = Depends(get_db)):
+    db_student = db.query(Student).filter(Student.id == student_id).first()
+    if db_student is None:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    for key, value in student.model_dump(exclude_unset=True).items():
+        setattr(db_student, key, value)
     db.commit()
     db.refresh(db_student)
     return db_student

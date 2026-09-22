@@ -71,6 +71,39 @@ def test_create_student():
     assert data["responsible_name"] == "Padre Pytest"
     assert data["responsible_dui"] == "01090300-8"
 
+def test_update_student():
+    email = f"update-{uuid4().hex[:8]}@ctc.edu.sv"
+    created = client.post(
+        "/students/",
+        headers=auth_headers(),
+        json={"full_name": "Nombre Original", "email": email},
+    )
+    assert created.status_code == 200
+
+    response = client.put(
+        f"/students/{created.json()['id']}",
+        headers=auth_headers(),
+        json={"full_name": "Nombre Actualizado", "contact_phone": "7000-0000"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["full_name"] == "Nombre Actualizado"
+    assert data["contact_phone"] == "7000-0000"
+    # No enviado en el update: debe conservar su valor anterior, no borrarse.
+    assert data["email"] == email
+
+
+def test_update_student_not_found():
+    response = client.put(
+        "/students/9999999999",
+        headers=auth_headers(),
+        json={"full_name": "No existe"},
+    )
+
+    assert response.status_code == 404
+
+
 def test_student_not_found():
     response = client.get("/students/9999999999", headers=auth_headers())
 
