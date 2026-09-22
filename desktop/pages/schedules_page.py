@@ -15,6 +15,20 @@ def _create(payload: dict):
     return api.post("/schedules/", json=body)
 
 
+def _update(row: dict, payload: dict):
+    body = {
+        "name": payload["name"],
+        "start_time": payload["start_time"],
+        "end_time": payload["end_time"],
+        "active": payload["active"],
+    }
+    return api.put(f"/schedules/{row['id']}", json=body)
+
+
+def _delete(row: dict):
+    return api.delete(f"/schedules/{row['id']}")
+
+
 class SchedulesPage(CrudPage):
     def __init__(self, parent=None):
         columns = [
@@ -29,6 +43,9 @@ class SchedulesPage(CrudPage):
             Field("start_time", "Hora de inicio", kind="time"),
             Field("end_time", "Hora de fin", kind="time"),
         ]
+        edit_spec = create_spec + [
+            Field("active", "Activo", kind="bool", default=True),
+        ]
         super().__init__(
             title="Horarios",
             subtitle="Turnos disponibles para las matrículas",
@@ -37,6 +54,9 @@ class SchedulesPage(CrudPage):
             create_spec=create_spec,
             create_fn=_create,
             create_label="Nuevo turno",
+            delete_fn=_delete,
+            edit_spec=edit_spec,
+            update_fn=_update,
             empty_message="No hay horarios registrados todavía.",
             parent=parent,
         )

@@ -21,6 +21,21 @@ def _create(payload: dict):
     return api.post("/students/", json=body)
 
 
+def _update(row: dict, payload: dict):
+    body = {
+        "full_name": payload["full_name"],
+        "birth_date": payload["birth_date"],
+        "email": payload["email"],
+        "contact_phone": payload["contact_phone"],
+        "address": payload["address"],
+        "schooling": payload["schooling"],
+        "responsible_name": payload["responsible_name"],
+        "responsible_dui": payload["responsible_dui"],
+        "responsible_kinship": payload["responsible_kinship"],
+    }
+    return api.put(f"/students/{row['id']}", json=body)
+
+
 def _delete(row: dict):
     return api.delete(f"/students/{row['id']}")
 
@@ -54,6 +69,8 @@ class StudentsPage(CrudPage):
             create_fn=_create,
             create_label="Registrar estudiante",
             delete_fn=_delete,
+            edit_spec=create_spec,
+            update_fn=_update,
             empty_message="No hay estudiantes registrados todavía.",
             parent=parent,
         )

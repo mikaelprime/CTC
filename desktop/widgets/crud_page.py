@@ -47,7 +47,7 @@ class Field:
 
 
 class RecordDialog(QDialog):
-    def __init__(self, title: str, fields: list[Field], parent=None):
+    def __init__(self, title: str, fields: list[Field], parent=None, initial: Optional[dict] = None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(360)
@@ -57,6 +57,8 @@ class RecordDialog(QDialog):
         layout = QFormLayout(self)
         for f in fields:
             widget = self._build_widget(f)
+            if initial and f.name in initial and initial[f.name] is not None:
+                self._apply_value(widget, f, initial[f.name])
             self.inputs[f.name] = widget
             layout.addRow(f.label, widget)
 
@@ -64,6 +66,25 @@ class RecordDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
+
+    @staticmethod
+    def _apply_value(widget: QWidget, f: Field, value: Any) -> None:
+        # Precarga el diálogo con los datos actuales del registro al editar,
+        # en vez de mostrarlo siempre en blanco como en modo "crear".
+        if f.kind == "int":
+            widget.setValue(int(value))
+        elif f.kind == "float":
+            widget.setValue(float(value))
+        elif f.kind == "date":
+            widget.setDate(QDate.fromString(str(value)[:10], "yyyy-MM-dd"))
+        elif f.kind == "time":
+            widget.setTime(QTime.fromString(str(value)[:8], "HH:mm:ss"))
+        elif f.kind in ("combo", "bool"):
+            index = widget.findData(value)
+            if index >= 0:
+                widget.setCurrentIndex(index)
+        else:
+            widget.setText(str(value))
 
     def _build_widget(self, f: Field) -> QWidget:
         if f.kind == "int":
@@ -133,6 +154,8 @@ class CrudPage(QWidget):
         create_fn: Optional[Callable[[dict], Any]] = None,
         create_label: str = "Nuevo",
         delete_fn: Optional[Callable[[dict], Any]] = None,
+        edit_spec: Optional[list[Field]] = None,
+        update_fn: Optional[Callable[[dict, dict], Any]] = None,
         empty_message: str = "No hay registros todavía.",
         parent=None,
     ):
@@ -142,6 +165,8 @@ class CrudPage(QWidget):
         self.create_spec = create_spec
         self.create_fn = create_fn
         self.delete_fn = delete_fn
+        self.edit_spec = edit_spec
+        self.update_fn = update_fn
         self.empty_message = empty_message
         self._rows: list[dict] = []
         self._search_cache: list[str] = []
@@ -179,10 +204,11 @@ class CrudPage(QWidget):
             toolbar.addWidget(add_btn)
         layout.addLayout(toolbar)
 
-        extra_cols = 1 if delete_fn else 0
+        self._has_actions = bool(delete_fn or (edit_spec and update_fn))
+        extra_cols = 1 if self._has_actions else 0
         self.table = QTableWidget()
         self.table.setColumnCount(len(columns) + extra_cols)
-        self.table.setHorizontalHeaderLabels([c.label for c in columns] + (["Acciones"] if delete_fn else []))
+        self.table.setHorizontalHeaderLabels([c.label for c in columns] + (["Acciones"] if self._has_actions else []))
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -241,11 +267,23 @@ class CrudPage(QWidget):
                     item = QTableWidgetItem(text)
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                     self.table.setItem(r, c, item)
-                if self.delete_fn:
-                    btn = QPushButton("Eliminar")
-                    btn.setStyleSheet("padding: 3px 10px;")
-                    btn.clicked.connect(lambda _checked=False, row=row: self.on_delete(row))
-                    self.table.setCellWidget(r, len(self.columns), btn)
+                if self._has_actions:
+                    cell = QWidget()
+                    cell_layout = QHBoxLayout(cell)
+                    cell_layout.setContentsMargins(0, 0, 0, 0)
+                    cell_layout.setSpacing(6)
+                    if self.edit_spec and self.update_fn:
+                        edit_btn = QPushButton("Editar")
+                        edit_btn.setStyleSheet("padding: 3px 10px;")
+                        edit_btn.clicked.connect(lambda _checked=False, row=row: self.on_edit(row))
+                        cell_layout.addWidget(edit_btn)
+                    if self.delete_fn:
+                        del_btn = QPushButton("Eliminar")
+                        del_btn.setStyleSheet("padding: 3px 10px;")
+                        del_btn.clicked.connect(lambda _checked=False, row=row: self.on_delete(row))
+                        cell_layout.addWidget(del_btn)
+                    cell_layout.addStretch()
+                    self.table.setCellWidget(r, len(self.columns), cell)
         finally:
             self.table.setUpdatesEnabled(True)
 
@@ -263,6 +301,18 @@ class CrudPage(QWidget):
         payload = dialog.values()
         try:
             self.create_fn(payload)
+        except ApiError as exc:
+            QMessageBox.critical(self, "Error", str(exc))
+            return
+        self.reload()
+
+    def on_edit(self, row: dict) -> None:
+        dialog = RecordDialog("Editar registro", self.edit_spec, self, initial=row)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        payload = dialog.values()
+        try:
+            self.update_fn(row, payload)
         except ApiError as exc:
             QMessageBox.critical(self, "Error", str(exc))
             return

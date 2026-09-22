@@ -18,6 +18,18 @@ def _create(payload: dict):
     return api.post("/diplomas/", json=body)
 
 
+def _update(row: dict, payload: dict):
+    body = {
+        "name": payload["name"],
+        "description": payload["description"] or None,
+        "duration_months": payload["duration_months"],
+        "registration_fee": payload["registration_fee"],
+        "monthly_fee": payload["monthly_fee"],
+        "active": payload["active"],
+    }
+    return api.put(f"/diplomas/{row['id']}", json=body)
+
+
 def _delete(row: dict):
     return api.delete(f"/diplomas/{row['id']}")
 
@@ -49,6 +61,8 @@ class DiplomasPage(CrudPage):
             create_fn=_create,
             create_label="Nuevo programa",
             delete_fn=_delete,
+            edit_spec=create_spec,
+            update_fn=_update,
             empty_message="No hay programas registrados todavía.",
             parent=parent,
         )
