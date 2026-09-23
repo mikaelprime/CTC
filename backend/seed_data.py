@@ -35,11 +35,14 @@ def populate_initial_data():
         if not exists:
             db.add(Diploma(**dip))
 
-    # 2. Cargar Horarios de Fin de Semana (Sábado / Domingo)
+    # 2. Cargar Horarios de Fin de Semana (Sábado / Domingo) — los 5 oficiales
+    # de la propuesta del proyecto, ni uno más ni uno menos.
     schedules_data = [
-        {"name": "Sábado Mañana", "start_time": time(8, 0), "end_time": time(12, 0), "active": True},
-        {"name": "Sábado Tarde", "start_time": time(13, 0), "end_time": time(17, 0), "active": True},
-        {"name": "Domingo Mañana", "start_time": time(8, 0), "end_time": time(12, 0), "active": True},
+        {"name": "Sábados 8:00 - 10:15", "start_time": time(8, 0), "end_time": time(10, 15), "active": True},
+        {"name": "Sábados 10:00 - 12:15", "start_time": time(10, 0), "end_time": time(12, 15), "active": True},
+        {"name": "Sábados 1:00 - 3:15", "start_time": time(13, 0), "end_time": time(15, 15), "active": True},
+        {"name": "Domingos 8:00 - 10:15", "start_time": time(8, 0), "end_time": time(10, 15), "active": True},
+        {"name": "Domingos 10:00 - 12:15", "start_time": time(10, 0), "end_time": time(12, 15), "active": True},
     ]
 
     for sch in schedules_data:

@@ -29,6 +29,8 @@ def _create(payload: dict):
         "diploma_id": payload["diploma_id"],
         "schedule_id": payload["schedule_id"],
         "enrollment_date": payload["enrollment_date"],
+        "start_date": payload["start_date"],
+        "observations": payload["observations"] or None,
     }
     return api.post("/enrollments/", json=body)
 
@@ -68,7 +70,12 @@ class EnrollmentsPage(CrudPage):
             Field("student_id", "Estudiante", kind="combo", options=_student_options),
             Field("diploma_id", "Programa", kind="combo", options=_diploma_options),
             Field("schedule_id", "Turno", kind="combo", options=_schedule_options),
-            Field("enrollment_date", "Fecha de inscripción", kind="date"),
+            Field("enrollment_date", "Fecha de matrícula", kind="date"),
+            # Distinta de la fecha de matrícula: es la que determina el
+            # primer cobro y los siguientes cada 28 días (ver README/PDF de
+            # la propuesta, sección "Funcionamiento básico").
+            Field("start_date", "Fecha de inicio de clases", kind="date"),
+            Field("observations", "Observaciones"),
         ]
         super().__init__(
             title="Gestión de Inscripciones",

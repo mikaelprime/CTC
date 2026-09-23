@@ -9,6 +9,7 @@ def _fetch():
 def _create(payload: dict):
     body = {
         "full_name": payload["full_name"],
+        "age": payload["age"] or None,
         "birth_date": payload["birth_date"],
         "email": payload["email"],
         "contact_phone": payload["contact_phone"],
@@ -17,6 +18,8 @@ def _create(payload: dict):
         "responsible_name": payload["responsible_name"],
         "responsible_dui": payload["responsible_dui"],
         "responsible_kinship": payload["responsible_kinship"],
+        "responsible_email": payload["responsible_email"] or None,
+        "responsible_whatsapp": payload["responsible_whatsapp"],
     }
     return api.post("/students/", json=body)
 
@@ -24,6 +27,7 @@ def _create(payload: dict):
 def _update(row: dict, payload: dict):
     body = {
         "full_name": payload["full_name"],
+        "age": payload["age"] or None,
         "birth_date": payload["birth_date"],
         "email": payload["email"],
         "contact_phone": payload["contact_phone"],
@@ -32,6 +36,8 @@ def _update(row: dict, payload: dict):
         "responsible_name": payload["responsible_name"],
         "responsible_dui": payload["responsible_dui"],
         "responsible_kinship": payload["responsible_kinship"],
+        "responsible_email": payload["responsible_email"] or None,
+        "responsible_whatsapp": payload["responsible_whatsapp"],
     }
     return api.put(f"/students/{row['id']}", json=body)
 
@@ -51,14 +57,17 @@ class StudentsPage(CrudPage):
         ]
         create_spec = [
             Field("full_name", "Nombre completo"),
+            Field("age", "Edad", kind="int", minimum=0, maximum=120),
             Field("birth_date", "Fecha de nacimiento", kind="date"),
-            Field("email", "Correo"),
-            Field("contact_phone", "Teléfono"),
             Field("address", "Dirección"),
+            Field("email", "Correo"),
+            Field("contact_phone", "Contacto"),
             Field("schooling", "Escolaridad"),
             Field("responsible_name", "Nombre del responsable"),
             Field("responsible_dui", "DUI del responsable"),
             Field("responsible_kinship", "Parentesco"),
+            Field("responsible_email", "Correo del responsable"),
+            Field("responsible_whatsapp", "WhatsApp del responsable"),
         ]
         super().__init__(
             title="Gestión de Estudiantes",
