@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from api_client import ApiError, api
 from widgets.animated_button import AnimatedButton
 from widgets.crud_page import Field, RecordDialog
+from widgets.report_export import Report, Section, export_report
 
 
 class CashiersPage(QWidget):
@@ -90,6 +91,9 @@ class CashiersPage(QWidget):
         report_row.addWidget(QLabel("Cajero"), 0, 4)
         report_row.addWidget(self.cashier_filter, 0, 5)
         report_row.addWidget(report_button, 0, 6)
+        export_button = AnimatedButton("Exportar Excel / PDF")
+        export_button.clicked.connect(self.export_closure)
+        report_row.addWidget(export_button, 0, 7)
         layout.addLayout(report_row)
 
         self.table = QTableWidget()
@@ -188,12 +192,49 @@ class CashiersPage(QWidget):
         except ApiError as exc:
             self.status.setText(str(exc))
             return
+        self._registers = rows
         self.table.setRowCount(len(rows))
         self.status.setText("Sin cajas registradas todavía." if not rows else "")
         for row_index, row in enumerate(rows):
             values = [row["cashier_name"], row["cashier_email"], f"#{row['id']}", f"${float(row['initial_amount']):,.2f}", f"${float(row['expected_amount']):,.2f}", f"${float(row['physical_amount']):,.2f}", f"${float(row['difference']):,.2f}", "Abierta" if row["is_open"] else "Cerrada", row.get("audit_explanation") or "Sin observaciones"]
             for column, value in enumerate(values):
                 self.table.setItem(row_index, column, QTableWidgetItem(value))
+
+    def export_closure(self):
+        report = getattr(self, "_monthly", None)
+        if report is None:
+            QMessageBox.warning(self, "Sin datos", "Primero actualiza el cierre mensual.")
+            return
+        cashier_id = self.cashier_filter.currentData()
+        month_key = report["periodo"]
+        registers = [
+            r for r in getattr(self, "_registers", [])
+            if (r.get("closed_at") or r.get("opened_at") or "").startswith(month_key)
+            and (cashier_id is None or r["cashier_id"] == cashier_id)
+        ]
+        export_report(self, Report(
+            title=f"Cierre de caja {month_key}",
+            subtitle=f"Cajero: {self.cashier_filter.currentText()}",
+            summary=[
+                ("Cajas cerradas", int(report["cajas_cerradas"])),
+                ("Cobrado en pagos", float(report["total_cobrado_mes"])),
+                ("Esperado en cajas", float(report["total_esperado_cajas"])),
+                ("Efectivo contado", float(report["total_efectivo_contado"])),
+                ("Descuadres", float(report["total_descuadres_mes"])),
+            ],
+            sections=[Section(
+                "Cajas del mes",
+                ["Caja", "Cajero", "Apertura", "Cierre", "Fondo", "Esperado", "Físico", "Diferencia", "Estado", "Auditoría"],
+                [
+                    [r["id"], r["cashier_name"], str(r["opened_at"])[:16].replace("T", " "),
+                     str(r.get("closed_at") or "")[:16].replace("T", " "), float(r["initial_amount"]),
+                     float(r["expected_amount"]), float(r["physical_amount"]), float(r["difference"]),
+                     "Abierta" if r["is_open"] else "Cerrada", r.get("audit_explanation") or ""]
+                    for r in registers
+                ],
+                money={4, 5, 6, 7},
+            )],
+        ), f"Cierre de caja {month_key}")
 
     def load_monthly_report(self):
         try:
@@ -203,6 +244,7 @@ class CashiersPage(QWidget):
         except (ApiError, ValueError) as exc:
             self.status.setText(f"No se pudo cargar el cierre mensual: {exc}")
             return
+        self._monthly = report
         self.summary_labels["cajas_cerradas"].setText(str(report["cajas_cerradas"]))
         self.summary_labels["total_cobrado_mes"].setText(f"${float(report['total_cobrado_mes']):,.2f}")
         self.summary_labels["total_efectivo_contado"].setText(f"${float(report['total_efectivo_contado']):,.2f}")

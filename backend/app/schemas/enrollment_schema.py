@@ -59,8 +59,23 @@ class EnrollmentCreate(EnrollmentBase):
         return self
 
 class EnrollmentUpdate(BaseModel):
-    status: Optional[str] = None
+    """Cambios permitidos a una inscripción existente. El programa no se
+    cambia (se anula y se crea otra) y el estado lo maneja el sistema."""
+
+    schedule_id: Optional[int] = None
+    tuition_plan: Optional[str] = None
+    start_date: Optional[date] = None
     observations: Optional[str] = None
+
+    @field_validator("observations")
+    @classmethod
+    def _observations(cls, v):
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) > 500:
+            raise ValueError("Las observaciones no pueden pasar de 500 caracteres")
+        return v or None
 
 
 class EnrollmentCancel(BaseModel):

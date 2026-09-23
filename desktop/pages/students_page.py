@@ -1,6 +1,7 @@
 from PySide6.QtCore import QDate
 
-from api_client import api
+from api_client import ApiError, api
+from pages.student_history import StudentHistoryDialog
 from widgets.crud_page import Column, CrudPage, Field
 
 # Las reglas reales viven en el backend (app/core/validators.py y
@@ -98,9 +99,19 @@ class StudentsPage(CrudPage):
             delete_fn=_delete if api.is_admin() else None,
             edit_spec=create_spec,
             update_fn=_update,
+            extra_actions=[("Historial", self.show_history, lambda row: True)],
             empty_message="No hay estudiantes registrados todavía.",
             parent=parent,
         )
+
+    def show_history(self, row: dict) -> None:
+        try:
+            dialog = StudentHistoryDialog(row["id"], self)
+        except ApiError as exc:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "No se pudo cargar el historial", str(exc))
+            return
+        dialog.exec()
 
     def prepare_dialog(self, dialog) -> None:
         birth = dialog.inputs["birth_date"]

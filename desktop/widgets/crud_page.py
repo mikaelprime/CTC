@@ -321,13 +321,17 @@ class CrudPage(QWidget):
         self.status_label.setText(message)
         self._render_rows()
 
-    def _render_rows(self) -> None:
+    def visible_rows(self) -> list[dict]:
+        """Las filas que se ven ahora (aplicando el buscador)."""
         query = self.search_input.text().strip().lower()
-        rows = [
+        return [
             row
             for row, haystack in zip(self._rows, self._search_cache)
             if not query or query in haystack
         ]
+
+    def _render_rows(self) -> None:
+        rows = self.visible_rows()
         self.table.setUpdatesEnabled(False)
         try:
             self.table.setRowCount(len(rows))

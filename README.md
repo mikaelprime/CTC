@@ -116,6 +116,18 @@ La API hace cumplir los roles (no solo el menú del escritorio):
 Un pago cobrado nunca se borra: se **anula** con motivo, queda en el
 historial y deja de sumar en caja y reportes.
 
+## Historial, edición y reportes
+
+- **Historial de pagos:** botón `Historial` en Estudiantes o Inscripciones;
+  muestra todas las inscripciones y cobros del estudiante (incluidos los
+  anulados, con motivo) y sus totales.
+- **Editar inscripción (admin):** turno, plan de colegiatura (aplica desde la
+  próxima cuota), observaciones y fecha de inicio (solo antes del primer
+  cobro de colegiatura). El programa no se cambia: se anula y se inscribe de nuevo.
+- **Exportar a Excel o PDF:** historial del estudiante, lista de pagos
+  (respeta el buscador), cobros próximos/atrasados y cierre mensual de caja.
+  Al guardar se elige el formato (`.xlsx` o `.pdf`).
+
 ## Correo
 
 El envío de comprobantes usa la API HTTP de [Mailjet](https://www.mailjet.com/)

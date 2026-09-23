@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QInputDialog, QLabel, QMessageBox
 from api_client import ApiError, api
 from widgets.crud_page import Column, CrudPage, Field
 from widgets.ticket_printer import print_ticket
+from pages.student_history import StudentHistoryDialog
 
 
 def _fetch():
@@ -66,6 +67,19 @@ def _delete(row: dict):
     return api.delete(f"/enrollments/{row['id']}")
 
 
+def _update(row: dict, payload: dict):
+    body = {
+        "schedule_id": payload["schedule_id"],
+        "tuition_plan": payload["tuition_plan"],
+        "observations": payload["observations"] or None,
+    }
+    # La fecha de inicio solo se envía si cambió: con colegiaturas ya
+    # cobradas el backend no permite moverla.
+    if payload["start_date"] != row.get("start_date"):
+        body["start_date"] = payload["start_date"]
+    return api.put(f"/enrollments/{row['id']}", json=body)
+
+
 class EnrollmentsPage(CrudPage):
     def __init__(self, parent=None):
         columns = [
@@ -104,6 +118,15 @@ class EnrollmentsPage(CrudPage):
             Field("cash_received", "Efectivo:", kind="float", default=20.0, maximum=100_000),
         ]
         self.is_admin = (api.user_role or "").upper() in {"ADMIN", "ADMINISTRADOR"}
+        # Editar: turno, plan (aplica desde la próxima cuota), fecha de inicio
+        # (solo antes del primer cobro de colegiatura) y observaciones. El
+        # programa no se cambia: se anula y se crea otra inscripción.
+        edit_spec = [
+            Field("schedule_id", "Turno", kind="combo", options=_schedule_options),
+            Field("tuition_plan", "Plan de colegiatura", kind="combo", options=lambda: _TUITION_PLAN_OPTIONS),
+            Field("start_date", "Fecha de inicio de clases", kind="date", min_days=-365 - 90, max_days=365),
+            Field("observations", "Observaciones", max_length=500),
+        ]
         super().__init__(
             title="Gestión de Inscripciones",
             subtitle="Matrículas por estudiante, programa y turno",
@@ -113,7 +136,10 @@ class EnrollmentsPage(CrudPage):
             create_fn=_create,
             create_label="Nueva inscripción",
             delete_fn=_delete if self.is_admin else None,
+            edit_spec=edit_spec if self.is_admin else None,
+            update_fn=_update,
             extra_actions=[
+                ("Historial", self.show_history, lambda row: True),
                 ("Anular", self.cancel_enrollment,
                  lambda row: self.is_admin and row.get("status") != "ANULADA"),
             ],
@@ -122,6 +148,8 @@ class EnrollmentsPage(CrudPage):
         )
 
     def prepare_dialog(self, dialog) -> None:
+        if "registration_type" not in dialog.inputs:
+            return  # formulario de edición: no se cobra matrícula
         registration = dialog.inputs["registration_type"]
         cash = dialog.inputs["cash_received"]
         cash.setPrefix("$ ")
@@ -176,6 +204,20 @@ class EnrollmentsPage(CrudPage):
                 ],
                 footer="Conserve este comprobante.",
             )
+
+    def on_edit(self, row: dict) -> None:
+        if row.get("status") == "ANULADA":
+            QMessageBox.information(self, "Inscripción anulada", "Una inscripción anulada no se puede editar.")
+            return
+        super().on_edit(row)
+
+    def show_history(self, row: dict) -> None:
+        try:
+            dialog = StudentHistoryDialog(row["student"]["id"], self)
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo cargar el historial", str(exc))
+            return
+        dialog.exec()
 
     def cancel_enrollment(self, row: dict) -> None:
         reason, ok = QInputDialog.getText(

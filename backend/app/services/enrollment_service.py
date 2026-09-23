@@ -1,5 +1,5 @@
 import calendar
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, List
 from fastapi import HTTPException
@@ -172,6 +172,58 @@ class EnrollmentService:
             db.delete(db_enrollment)
             db.commit()
         return db_enrollment
+
+    @staticmethod
+    def update(db: Session, enrollment_id: int, changes: dict) -> Any:
+        db_enrollment = EnrollmentService.get_by_id(db, enrollment_id)
+        if db_enrollment is None:
+            return None
+        if db_enrollment.status == "ANULADA":
+            raise HTTPException(status_code=400, detail="La inscripción está anulada; no se puede editar")
+
+        if changes.get("schedule_id") is not None:
+            if db.query(Schedule.id).filter(Schedule.id == changes["schedule_id"]).first() is None:
+                raise HTTPException(status_code=404, detail="El horario seleccionado no existe")
+            db_enrollment.schedule_id = changes["schedule_id"]
+
+        if changes.get("tuition_plan") is not None:
+            if changes["tuition_plan"] not in TUITION_PLANS:
+                raise HTTPException(status_code=400, detail=f"Plan de colegiatura inválido: {changes['tuition_plan']}")
+            # Solo afecta cobros futuros: las cuotas ya pagadas guardan su monto.
+            db_enrollment.tuition_plan = changes["tuition_plan"]
+
+        new_start = changes.get("start_date")
+        if new_start is not None and new_start != db_enrollment.start_date:
+            # La fecha de inicio ancla el ciclo de 28 días: una vez cobrada
+            # la primera colegiatura, moverla desfasaría todas las cuotas.
+            paid_tuition = db.query(Payment.id).filter(
+                Payment.enrollment_id == enrollment_id,
+                Payment.kind == "COLEGIATURA",
+                Payment.status == "PAGADO",
+            ).first()
+            if paid_tuition:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No se puede cambiar la fecha de inicio: ya hay colegiaturas cobradas con el ciclo actual.",
+                )
+            if not (
+                db_enrollment.enrollment_date - timedelta(days=90)
+                <= new_start
+                <= db_enrollment.enrollment_date + timedelta(days=365)
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="La fecha de inicio debe estar entre 90 días antes y un año después de la matrícula",
+                )
+            db_enrollment.start_date = new_start
+            db_enrollment.end_date = EnrollmentService._add_months(new_start, db_enrollment.diploma.duration_months)
+            db_enrollment.last_reminder_due_date = None
+
+        if "observations" in changes:
+            db_enrollment.observations = changes["observations"]
+
+        db.commit()
+        return EnrollmentService.get_by_id(db, enrollment_id)
 
     @staticmethod
     def cancel(db: Session, enrollment_id: int, reason: str) -> Any:

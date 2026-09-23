@@ -22,6 +22,7 @@ from api_client import ApiError, api
 from widgets.animated_button import AnimatedButton
 from widgets.crud_page import Column, CrudPage, Field
 from widgets.effects import apply_card_shadow
+from widgets.report_export import Report, Section, export_report
 from widgets.ticket_printer import print_ticket
 
 
@@ -107,6 +108,41 @@ class PaymentsPage(CrudPage):
         if self.is_cashier:
             self._add_collect_button()
         self._add_upcoming_button()
+        self._add_export_button()
+
+    def _add_export_button(self):
+        button = AnimatedButton("Exportar pagos")
+        button.clicked.connect(self.export_payments)
+        self.layout().insertWidget(3, button)
+
+    def export_payments(self):
+        rows = self.visible_rows()
+        paid = [r for r in rows if r["status"] == "PAGADO"]
+        report = Report(
+            title="Reporte de pagos",
+            subtitle=f"{len(rows)} registros" + (
+                f" · filtro: “{self.search_input.text().strip()}”" if self.search_input.text().strip() else ""
+            ),
+            summary=[
+                ("Total cobrado", sum(float(r["total"]) for r in paid)),
+                ("Recargos", sum(float(r.get("surcharge") or 0) for r in paid)),
+                ("Anulado", sum(float(r["total"]) for r in rows if r["status"] == "ANULADO")),
+                ("Pagos cobrados", len(paid)),
+            ],
+            sections=[Section(
+                "Pagos",
+                ["ID", "Inscripción", "Concepto", "Fecha de pago", "Vence", "Monto", "Recargo", "Total",
+                 "Método", "Estado", "Observaciones"],
+                [
+                    [r["id"], r["enrollment_id"], _KIND_LABELS.get(r.get("kind"), r.get("kind")), r["payment_date"],
+                     r["due_date"], float(r["amount"]), float(r.get("surcharge") or 0), float(r["total"]),
+                     r["payment_type"], r["status"], r.get("observations") or ""]
+                    for r in rows
+                ],
+                money={5, 6, 7},
+            )],
+        )
+        export_report(self, report, "Pagos")
 
     def _add_upcoming_button(self):
         # PDF: "muestra al cajero o administrador los pagos próximos".
@@ -147,6 +183,22 @@ class PaymentsPage(CrudPage):
         table.resizeColumnsToContents()
         layout.addWidget(table)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        export = AnimatedButton("Exportar Excel / PDF")
+        export.clicked.connect(lambda: export_report(dialog, Report(
+            title="Cobros próximos (7 días) y atrasados",
+            summary=[
+                ("Matrículas atrasadas", sum(1 for r in rows if r["is_overdue"])),
+                ("Por vencer en 7 días", sum(1 for r in rows if not r["is_overdue"])),
+                ("Monto por cobrar", sum(float(r["amount"]) for r in rows)),
+            ],
+            sections=[Section(
+                "Detalle", headers,
+                [[f"#{r['enrollment_id']}", r["student_name"], r["diploma_name"], str(r["due_date"]),
+                  int(r["days_remaining"]), float(r["amount"]), r["status"]] for r in rows],
+                money={5},
+            )],
+        ), "Cobros proximos"))
+        buttons.addButton(export, QDialogButtonBox.ActionRole)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         dialog.exec()

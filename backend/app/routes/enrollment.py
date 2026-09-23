@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.session import get_db
-from app.schemas.enrollment_schema import (EnrollmentCancel, EnrollmentCreate, EnrollmentResponse)
+from app.schemas.enrollment_schema import (EnrollmentCancel, EnrollmentCreate, EnrollmentResponse, EnrollmentUpdate)
 from app.services.enrollment_service import EnrollmentService
 from app.auth.dependencies import get_current_user, require_admin, require_roles
 from app.core.pricing import REGISTRATION_TYPES
@@ -46,6 +46,18 @@ def get_by_id(
         raise HTTPException(404, "Inscripción no encontrada")
 
     return enrollment
+
+@router.put("/{enrollment_id}", response_model=EnrollmentResponse, dependencies=[Depends(require_admin)])
+def update(
+    enrollment_id: int,
+    data: EnrollmentUpdate,
+    db: Session = Depends(get_db),
+):
+    enrollment = EnrollmentService.update(db, enrollment_id, data.model_dump(exclude_unset=True))
+    if not enrollment:
+        raise HTTPException(404, "Inscripción no encontrada")
+    return enrollment
+
 
 @router.post("/{enrollment_id}/cancel", response_model=EnrollmentResponse)
 def cancel(
