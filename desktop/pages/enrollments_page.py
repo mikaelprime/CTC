@@ -23,6 +23,26 @@ def _schedule_options():
     return [(s["name"], s["id"]) for s in schedules]
 
 
+# Tarifario fijo institucional (no depende del diplomado): ver
+# backend/app/core/pricing.py, que es la fuente de verdad real para el
+# cálculo. Estas opciones son solo lo que se muestra en el combo.
+_REGISTRATION_OPTIONS = [
+    ("Matrícula completa ($20.00)", "COMPLETA"),
+    ("Promo-Matrícula 50% OFF ($10.00)", "PROMO"),
+    ("Matrícula gratis ($0.00)", "GRATIS"),
+]
+_TUITION_PLAN_OPTIONS = [
+    ("Plan Grupal ($25.00/mes)", "GRUPAL"),
+    ("Plan Privado ($55.00/mes)", "PRIVADO"),
+    ("Plan On-line ($70.00/mes)", "ONLINE"),
+]
+_TUITION_PLAN_SHORT_LABELS = {"GRUPAL": "Grupal", "PRIVADO": "Privado", "ONLINE": "On-line"}
+
+
+def _tuition_plan_label(value):
+    return _TUITION_PLAN_SHORT_LABELS.get(value, value or "—")
+
+
 def _create(payload: dict):
     body = {
         "student_id": payload["student_id"],
@@ -30,6 +50,8 @@ def _create(payload: dict):
         "schedule_id": payload["schedule_id"],
         "enrollment_date": payload["enrollment_date"],
         "start_date": payload["start_date"],
+        "registration_type": payload["registration_type"],
+        "tuition_plan": payload["tuition_plan"],
         "observations": payload["observations"] or None,
     }
     return api.post("/enrollments/", json=body)
@@ -55,6 +77,7 @@ class EnrollmentsPage(CrudPage):
             Column("student", "Estudiante", formatter=lambda r: r["student"]["full_name"]),
             Column("diploma", "Programa", formatter=lambda r: r["diploma"]["name"]),
             Column("schedule", "Turno", formatter=lambda r: r["schedule"]["name"]),
+            Column("tuition_plan", "Plan", formatter=lambda r: _tuition_plan_label(r.get("tuition_plan"))),
             Column("start_date", "Inicio"),
             Column("end_date", "Fin"),
             Column(
@@ -75,6 +98,8 @@ class EnrollmentsPage(CrudPage):
             # primer cobro y los siguientes cada 28 días (ver README/PDF de
             # la propuesta, sección "Funcionamiento básico").
             Field("start_date", "Fecha de inicio de clases", kind="date"),
+            Field("registration_type", "Tipo de matrícula", kind="combo", options=lambda: _REGISTRATION_OPTIONS),
+            Field("tuition_plan", "Plan de colegiatura", kind="combo", options=lambda: _TUITION_PLAN_OPTIONS),
             Field("observations", "Observaciones"),
         ]
         super().__init__(

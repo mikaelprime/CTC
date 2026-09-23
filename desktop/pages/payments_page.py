@@ -18,6 +18,7 @@ from api_client import ApiError, api
 from widgets.animated_button import AnimatedButton
 from widgets.crud_page import Column, CrudPage, Field
 from widgets.effects import apply_card_shadow
+from widgets.ticket_printer import print_ticket
 
 
 def _fetch():
@@ -237,15 +238,38 @@ class PaymentsPage(CrudPage):
         except ApiError as exc:
             QMessageBox.critical(self, "No se pudo registrar el cobro", str(exc))
             return
-        QMessageBox.information(
-            self,
-            "Cobro registrado",
-            f"Total: ${float(result['total']):,.2f}\n"
-            f"Cambio: ${float(result['change']):,.2f}\n"
-            f"Próximo pago: {result['next_payment_date']}",
-        )
+        self._show_collect_result(enrollment.currentText(), result)
         self.reload()
         self.refresh_register()
+
+    def _show_collect_result(self, enrollment_label: str, result: dict) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle("Cobro registrado")
+        box.setText(
+            f"Total: ${float(result['total']):,.2f}\n"
+            f"Cambio: ${float(result['change']):,.2f}\n"
+            f"Próximo pago: {result['next_payment_date']}"
+        )
+        print_button = box.addButton("Imprimir ticket", QMessageBox.ActionRole)
+        box.addButton(QMessageBox.Ok)
+        box.exec()
+        if box.clickedButton() is print_button:
+            print_ticket(
+                self,
+                "Comprobante de pago",
+                [
+                    ("Matrícula", enrollment_label),
+                    ("Meses pagados", str(result["months_paid"])),
+                    ("Monto", f"${float(result['amount']):,.2f}"),
+                    ("Recargo", f"${float(result['surcharge']):,.2f}"),
+                    ("Total", f"${float(result['total']):,.2f}"),
+                    ("Efectivo recibido", f"${float(result['cash_received']):,.2f}"),
+                    ("Cambio", f"${float(result['change']):,.2f}"),
+                    ("Próximo pago", str(result["next_payment_date"])),
+                ],
+                footer="Conserve este comprobante.",
+            )
 
     def update_due_info(self, enrollment, months, label):
         if enrollment.currentData() is None:
