@@ -35,11 +35,20 @@ class CashierCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def _password(cls, v):
-        if v.strip() != v or " " in v:
-            raise ValueError("La contraseña no puede contener espacios")
-        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
-            raise ValueError("La contraseña debe tener al menos una letra y un número")
-        return v
+        return validators.password(v)
+
+
+class CashierStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class PasswordReset(BaseModel):
+    new_password: str = Field(max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password(cls, v):
+        return validators.password(v)
 
 
 @router.post("/cashiers", response_model=CashierResponse, status_code=status.HTTP_201_CREATED)
@@ -76,3 +85,44 @@ def list_cashiers(
     _: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
 ):
     return db.query(User).join(Role).filter(Role.name.ilike("cajero%" )).all()
+
+
+def _get_cashier(db: Session, cashier_id: int) -> User:
+    cashier = (
+        db.query(User).join(Role)
+        .filter(User.id == cashier_id, Role.name.ilike("cajero%"))
+        .first()
+    )
+    if cashier is None:
+        raise HTTPException(status_code=404, detail="Cajero no encontrado")
+    return cashier
+
+
+@router.patch("/cashiers/{cashier_id}", response_model=CashierResponse)
+def set_cashier_status(
+    cashier_id: int,
+    data: CashierStatusUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
+):
+    """Desactivar a un cajero que deja de trabajar (no se borra: sus cobros y
+    cajas siguen en los reportes). Su sesión deja de servir al instante, porque
+    get_current_user rechaza usuarios inactivos."""
+    cashier = _get_cashier(db, cashier_id)
+    cashier.is_active = data.is_active
+    db.commit()
+    db.refresh(cashier)
+    return cashier
+
+
+@router.post("/cashiers/{cashier_id}/reset-password")
+def reset_cashier_password(
+    cashier_id: int,
+    data: PasswordReset,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
+):
+    cashier = _get_cashier(db, cashier_id)
+    cashier.password = hash_password(data.new_password)
+    db.commit()
+    return {"message": f"Contraseña de {cashier.full_name} restablecida"}

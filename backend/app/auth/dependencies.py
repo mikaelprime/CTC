@@ -50,3 +50,10 @@ def require_roles(*allowed_roles: str):
         return current_user
 
     return dependency
+
+
+# Acciones que cambian catálogos, borran datos o tocan dinero ya cobrado:
+# antes solo se escondían en el menú del escritorio, pero la API las
+# aceptaba de cualquier usuario con sesión (p. ej. un cajero podía borrar
+# pagos llamando a DELETE /payments/{id}).
+require_admin = require_roles("ADMIN", "ADMINISTRADOR")

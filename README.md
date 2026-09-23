@@ -101,6 +101,21 @@ Cambia estas contraseñas antes de usar el sistema fuera de desarrollo.
 4. Registra cobros únicamente con la caja abierta.
 5. Al finalizar, selecciona `Cerrar caja`, cuenta el efectivo e ingresa una explicación si existe diferencia.
 
+## Permisos
+
+La API hace cumplir los roles (no solo el menú del escritorio):
+
+- **Solo administrador:** crear/editar/borrar programas y horarios, borrar
+  estudiantes o inscripciones, anular inscripciones y pagos, registrar o
+  editar pagos manuales, configuración, cajeros (crear, activar/desactivar,
+  restablecer contraseña) y el cierre mensual general.
+- **Cajero:** registrar y editar estudiantes, inscribir, cobrar, abrir/cerrar
+  su caja y ver su propio cierre mensual.
+- **Todos:** cambiar su propia contraseña.
+
+Un pago cobrado nunca se borra: se **anula** con motivo, queda en el
+historial y deja de sumar en caja y reportes.
+
 ## Correo
 
 El envío de comprobantes usa la API HTTP de [Mailjet](https://www.mailjet.com/)

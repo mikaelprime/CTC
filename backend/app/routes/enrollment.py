@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.schemas.enrollment_schema import (EnrollmentCancel, EnrollmentCreate, EnrollmentResponse)
 from app.services.enrollment_service import EnrollmentService
-from app.auth.dependencies import get_current_user, require_roles
+from app.auth.dependencies import get_current_user, require_admin, require_roles
 from app.core.pricing import REGISTRATION_TYPES
 from app.services.cashier_service import CashierService
 
@@ -60,7 +60,7 @@ def cancel(
     return enrollment
 
 
-@router.delete("/{enrollment_id}")
+@router.delete("/{enrollment_id}", dependencies=[Depends(require_admin)])
 def delete(
     enrollment_id: int,
     db: Session = Depends(get_db)

@@ -76,6 +76,18 @@ class PaymentResponse(PaymentBase):
     kind: str = "COLEGIATURA"
     model_config = ConfigDict(from_attributes=True)
 
+class PaymentVoid(BaseModel):
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _reason(cls, v):
+        cleaned = validators.free_text(v, "El motivo de anulación", min_length=5, max_length=200)
+        if cleaned is None:
+            raise ValueError("El motivo de anulación es obligatorio")
+        return cleaned
+
+
 class PaymentAdvanceCreate(BaseModel):
     enrollment_id: int
     months: int = Field(ge=1, le=12)

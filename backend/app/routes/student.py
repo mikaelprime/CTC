@@ -4,7 +4,7 @@ from app.database.database import get_db
 from app.models.student import Student
 from app.schemas.student_schema import StudentCreate, StudentUpdate, check_student_consistency
 from app.models.enrollment import Enrollment
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_admin
 
 router = APIRouter(
     prefix="/students",
@@ -63,7 +63,7 @@ def get_student(student_id: int, db: Session = Depends(get_db)):
     return student
 
 
-@router.delete("/{student_id}")
+@router.delete("/{student_id}", dependencies=[Depends(require_admin)])
 def delete_student(student_id: int, db: Session = Depends(get_db)):
     student = db.query(Student).filter(Student.id == student_id).first()
     if student is None:

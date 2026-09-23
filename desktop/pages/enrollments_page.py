@@ -112,7 +112,7 @@ class EnrollmentsPage(CrudPage):
             create_spec=create_spec,
             create_fn=_create,
             create_label="Nueva inscripción",
-            delete_fn=_delete,
+            delete_fn=_delete if self.is_admin else None,
             extra_actions=[
                 ("Anular", self.cancel_enrollment,
                  lambda row: self.is_admin and row.get("status") != "ANULADA"),

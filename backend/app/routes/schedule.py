@@ -8,7 +8,7 @@ from app.services.schedule_service import (
     update_schedule,
     delete_schedule,
 )
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_admin
 
 router = APIRouter(
     prefix="/schedules",
@@ -20,14 +20,14 @@ router = APIRouter(
 def get_schedules(db: Session = Depends(get_db)):
     return list_schedules(db)
 
-@router.post("/", response_model=ScheduleResponse)
+@router.post("/", response_model=ScheduleResponse, dependencies=[Depends(require_admin)])
 def add_schedule(
     schedule: ScheduleCreate,
     db: Session = Depends(get_db)
 ):
     return create_schedule(db, schedule)
 
-@router.put("/{schedule_id}", response_model=ScheduleResponse)
+@router.put("/{schedule_id}", response_model=ScheduleResponse, dependencies=[Depends(require_admin)])
 def edit_schedule(
     schedule_id: int,
     schedule: ScheduleUpdate,
@@ -40,7 +40,7 @@ def edit_schedule(
 
     return updated
 
-@router.delete("/{schedule_id}")
+@router.delete("/{schedule_id}", dependencies=[Depends(require_admin)])
 def remove_schedule(
     schedule_id: int,
     db: Session = Depends(get_db)

@@ -118,6 +118,8 @@ def ingresos_mensuales(data: dict, count: int = 6) -> dict:
     proyectado = dict.fromkeys(months, 0.0)
 
     for p in payments:
+        if p["status"] == "ANULADO":
+            continue
         due_key = (_parse_date(p["due_date"]).year, _parse_date(p["due_date"]).month)
         if due_key in proyectado:
             proyectado[due_key] += float(p["total"])
@@ -157,6 +159,8 @@ def actividad_reciente(data: dict, limit: int = 8) -> list[dict]:
         enrollment = enrollments_by_id.get(p["enrollment_id"])
         if p["status"] == "PAGADO":
             estado, kind = "Pagado", "success"
+        elif p["status"] == "ANULADO":
+            estado, kind = "Anulado", "error"
         elif _parse_date(p["due_date"]) < today:
             estado, kind = "Vencido", "error"
         else:

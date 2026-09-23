@@ -6,10 +6,10 @@ from app.schemas.payment_schema import (
     PaymentUpdate,
     PaymentResponse,
     PaymentAdvanceCreate
-    ,PaymentCollectCreate, PaymentCollectResponse
+    ,PaymentCollectCreate, PaymentCollectResponse, PaymentVoid
 )
 from app.services.payment_service import PaymentService
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_admin
 from app.services.cashier_service import CashierService
 
 router = APIRouter(
@@ -18,7 +18,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
-@router.post("/", response_model=PaymentResponse)
+@router.post("/", response_model=PaymentResponse, dependencies=[Depends(require_admin)])
 def create_payment(
     data: PaymentCreate,
     db: Session = Depends(get_db),
@@ -73,7 +73,7 @@ def get_payment(
 ):
     return PaymentService.get_by_id(db, payment_id)
 
-@router.put("/{payment_id}", response_model=PaymentResponse)
+@router.put("/{payment_id}", response_model=PaymentResponse, dependencies=[Depends(require_admin)])
 def update_payment(
     payment_id: int,
     data: PaymentUpdate,
@@ -81,7 +81,16 @@ def update_payment(
 ):
     return PaymentService.update(db, payment_id, data)
 
-@router.delete("/{payment_id}")
+@router.post("/{payment_id}/void", response_model=PaymentResponse, dependencies=[Depends(require_admin)])
+def void_payment(
+    payment_id: int,
+    data: PaymentVoid,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return PaymentService.void(db, payment_id, data.reason, current_user)
+
+@router.delete("/{payment_id}", dependencies=[Depends(require_admin)])
 def delete_payment(
     payment_id: int,
     db: Session = Depends(get_db)

@@ -2,6 +2,7 @@ from datetime import date
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QInputDialog,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -60,6 +61,9 @@ def _delete(row: dict):
     return api.delete(f"/payments/{row['id']}")
 
 
+_KIND_LABELS = {"MATRICULA": "Matrícula", "COLEGIATURA": "Colegiatura"}
+
+
 class PaymentsPage(CrudPage):
     def __init__(self, parent=None):
         self.is_cashier = (api.user_role or "").upper() in {"CAJERO", "CASHIER"}
@@ -67,6 +71,7 @@ class PaymentsPage(CrudPage):
             Column("id", "ID"),
             Column("enrollment_id", "Matrícula", formatter=lambda r: f"#{r['enrollment_id']}"),
             Column("total", "Total", formatter=lambda r: f"${float(r['total']):,.2f}"),
+            Column("kind", "Concepto", formatter=lambda r: _KIND_LABELS.get(r.get("kind"), r.get("kind") or "—")),
             Column("payment_type", "Método"),
             Column("due_date", "Vencimiento"),
             Column("status", "Estado"),
@@ -88,7 +93,13 @@ class PaymentsPage(CrudPage):
             create_spec=create_spec,
             create_fn=_create,
             create_label="Registrar pago",
-            delete_fn=_delete,
+            # Un pago cobrado no se borra (descuadraría la caja): el admin lo
+            # anula con motivo y queda en el historial. Solo las cuotas
+            # PENDIENTE (nunca cobradas) se pueden eliminar.
+            extra_actions=[
+                ("Anular", self.void_payment, lambda row: api.is_admin() and row.get("status") == "PAGADO"),
+                ("Eliminar", self.delete_pending, lambda row: api.is_admin() and row.get("status") == "PENDIENTE"),
+            ],
             empty_message="No hay pagos registrados todavía. Crea primero una inscripción.",
             parent=parent,
         )
@@ -139,6 +150,32 @@ class PaymentsPage(CrudPage):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         dialog.exec()
+
+    def void_payment(self, row: dict) -> None:
+        reason, ok = QInputDialog.getText(
+            self,
+            "Anular pago",
+            f"Motivo para anular el pago #{row['id']} (${float(row['total']):,.2f}).\n"
+            "Queda en el historial y la cuota vuelve a quedar por cobrar.",
+        )
+        if not ok:
+            return
+        try:
+            api.post(f"/payments/{row['id']}/void", json={"reason": reason})
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo anular", str(exc))
+            return
+        self.reload()
+
+    def delete_pending(self, row: dict) -> None:
+        if QMessageBox.question(self, "Confirmar", f"¿Eliminar la cuota pendiente #{row['id']}?") != QMessageBox.Yes:
+            return
+        try:
+            _delete(row)
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo eliminar", str(exc))
+            return
+        self.reload()
 
     def _add_collect_button(self):
         button = AnimatedButton("Cobrar colegiatura")

@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_admin
 from app.core.pricing import TUITION_PLANS
 from app.database.session import get_db
 from app.models.enrollment import Enrollment
@@ -53,6 +53,6 @@ def upcoming_payments(days: int = 7, include_overdue: bool = True, db: Session =
     return rows
 
 
-@router.get("/cashier-monthly")
+@router.get("/cashier-monthly", dependencies=[Depends(require_admin)])
 def cashier_monthly(year: int, month: int, db: Session = Depends(get_db)):
     return CashierService.monthly_closure(db, year, month)

@@ -1,9 +1,12 @@
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -110,6 +113,10 @@ class MainWindow(QMainWindow):
         user_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
         sidebar_layout.addWidget(user_label)
 
+        password_btn = QPushButton("Cambiar contraseña")
+        password_btn.clicked.connect(self.change_password)
+        sidebar_layout.addWidget(password_btn)
+
         logout_btn = QPushButton("Cerrar sesión")
         logout_btn.clicked.connect(self.handle_logout)
         sidebar_layout.addWidget(logout_btn)
@@ -146,6 +153,23 @@ class MainWindow(QMainWindow):
         # solo se recarga aquí en visitas posteriores.
         if not just_created and hasattr(widget, "reload"):
             widget.reload()
+
+    def change_password(self) -> None:
+        from widgets.crud_page import Field, RecordDialog
+
+        fields = [
+            Field("current_password", "Contraseña actual", required=True),
+            Field("new_password", "Nueva contraseña", regex=r"^\S*$", max_length=128,
+                  placeholder="Mínimo 6, con letras y números", required=True),
+        ]
+        dialog = RecordDialog(
+            "Cambiar mi contraseña", fields, self,
+            submit=lambda values: api.post("/auth/change-password", json=values),
+        )
+        for name in ("current_password", "new_password"):
+            dialog.inputs[name].setEchoMode(QLineEdit.Password)
+        if dialog.exec() == QDialog.Accepted:
+            QMessageBox.information(self, "Contraseña actualizada", "Usa la nueva contraseña la próxima vez que inicies sesión.")
 
     def handle_logout(self) -> None:
         self.close()

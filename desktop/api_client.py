@@ -50,6 +50,9 @@ class ApiClient:
     def is_authenticated(self) -> bool:
         return bool(self.token)
 
+    def is_admin(self) -> bool:
+        return (self.user_role or "").upper() in {"ADMIN", "ADMINISTRADOR"}
+
     def ping(self, timeout: int = _LOGIN_TIMEOUT) -> bool:
         """Verifica que el backend responda. Usado por la pantalla de carga
         para saber si hay que esperar a que Render despierte el servicio."""
@@ -130,6 +133,9 @@ class ApiClient:
 
     def put(self, path: str, json: Optional[dict] = None):
         return self._request("PUT", path, json=json)
+
+    def patch(self, path: str, json: Optional[dict] = None):
+        return self._request("PATCH", path, json=json)
 
     def delete(self, path: str):
         return self._request("DELETE", path)

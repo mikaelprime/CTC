@@ -95,7 +95,7 @@ class StudentsPage(CrudPage):
             create_spec=create_spec,
             create_fn=_create,
             create_label="Registrar estudiante",
-            delete_fn=_delete,
+            delete_fn=_delete if api.is_admin() else None,
             edit_spec=create_spec,
             update_fn=_update,
             empty_message="No hay estudiantes registrados todavía.",

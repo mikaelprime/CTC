@@ -5,7 +5,9 @@ from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
     QGridLayout,
+    QHBoxLayout,
     QHeaderView,
+    QPushButton,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -35,6 +37,17 @@ class CashiersPage(QWidget):
         add_button.setProperty("class", "primary")
         add_button.clicked.connect(self.create_cashier)
         layout.addWidget(add_button)
+
+        # Cuentas de cajero: desactivar a quien deja de trabajar (no se
+        # borra, sus cobros siguen en los reportes) y restablecer contraseñas.
+        self.cashiers_table = QTableWidget()
+        self.cashiers_table.setColumnCount(4)
+        self.cashiers_table.setHorizontalHeaderLabels(["Cajero", "Correo", "Estado", "Acciones"])
+        self.cashiers_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.cashiers_table.verticalHeader().setVisible(False)
+        self.cashiers_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.cashiers_table.setMaximumHeight(200)
+        layout.addWidget(self.cashiers_table)
 
         summary_grid = QGridLayout()
         self.summary_labels = {}
@@ -115,7 +128,61 @@ class CashiersPage(QWidget):
         QMessageBox.information(self, "Cajero creado", "El cajero ya puede iniciar sesión con su correo.")
         self.reload()
 
+    def reload_cashiers(self):
+        try:
+            cashiers = api.get("/users/cashiers") or []
+        except ApiError as exc:
+            self.status.setText(str(exc))
+            return
+        self.cashiers_table.setRowCount(len(cashiers))
+        self.cashiers_table.verticalHeader().setDefaultSectionSize(40)
+        for index, cashier in enumerate(cashiers):
+            active = cashier["is_active"]
+            values = [cashier["full_name"], cashier["email"], "Activo" if active else "Desactivado"]
+            for column, value in enumerate(values):
+                self.cashiers_table.setItem(index, column, QTableWidgetItem(value))
+            cell = QWidget()
+            cell_layout = QHBoxLayout(cell)
+            cell_layout.setContentsMargins(0, 0, 0, 0)
+            toggle = QPushButton("Desactivar" if active else "Activar")
+            toggle.setStyleSheet("padding: 3px 10px;")
+            toggle.clicked.connect(lambda _c=False, row=cashier: self.toggle_cashier(row))
+            reset = QPushButton("Restablecer contraseña")
+            reset.setStyleSheet("padding: 3px 10px;")
+            reset.clicked.connect(lambda _c=False, row=cashier: self.reset_password(row))
+            cell_layout.addWidget(toggle)
+            cell_layout.addWidget(reset)
+            cell_layout.addStretch()
+            self.cashiers_table.setCellWidget(index, 3, cell)
+
+    def toggle_cashier(self, cashier):
+        action = "desactivar" if cashier["is_active"] else "activar"
+        detail = (
+            "\nNo podrá iniciar sesión y su sesión actual se cerrará. Sus cobros y cajas se conservan."
+            if cashier["is_active"] else ""
+        )
+        if QMessageBox.question(self, "Confirmar", f"¿{action.capitalize()} a {cashier['full_name']}?{detail}") != QMessageBox.Yes:
+            return
+        try:
+            api.patch(f"/users/cashiers/{cashier['id']}", json={"is_active": not cashier["is_active"]})
+        except ApiError as exc:
+            QMessageBox.critical(self, f"No se pudo {action}", str(exc))
+            return
+        self.reload_cashiers()
+
+    def reset_password(self, cashier):
+        field = Field("new_password", "Nueva contraseña", regex=r"^\S*$", max_length=128,
+                      placeholder="Mínimo 6, con letras y números", required=True)
+        dialog = RecordDialog(
+            f"Restablecer contraseña de {cashier['full_name']}", [field], self,
+            submit=lambda values: api.post(f"/users/cashiers/{cashier['id']}/reset-password", json=values),
+        )
+        dialog.inputs["new_password"].setEchoMode(QLineEdit.Password)
+        if dialog.exec() == QDialog.Accepted:
+            QMessageBox.information(self, "Contraseña restablecida", "Comunica la nueva contraseña al cajero.")
+
     def reload(self):
+        self.reload_cashiers()
         try:
             rows = api.get("/cashier/registers") or []
         except ApiError as exc:

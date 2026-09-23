@@ -101,6 +101,16 @@ def dui(value: Optional[str], label: str = "El DUI") -> Optional[str]:
     return f"{digits[:8]}-{digits[8]}"
 
 
+def password(value: str) -> str:
+    if len(value) < 6:
+        raise ValueError("La contraseña debe tener al menos 6 caracteres")
+    if value.strip() != value or " " in value:
+        raise ValueError("La contraseña no puede contener espacios")
+    if not any(c.isalpha() for c in value) or not any(c.isdigit() for c in value):
+        raise ValueError("La contraseña debe tener al menos una letra y un número")
+    return value
+
+
 def age_on(birth_date: date, today: Optional[date] = None) -> int:
     today = today or date.today()
     return today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))

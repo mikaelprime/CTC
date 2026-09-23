@@ -53,7 +53,11 @@ class PaymentService:
         )
         last = dict(
             db.query(Payment.enrollment_id, func.max(Payment.due_date))
-            .filter(Payment.enrollment_id.in_(ids), Payment.kind == "COLEGIATURA")
+            .filter(
+                Payment.enrollment_id.in_(ids),
+                Payment.kind == "COLEGIATURA",
+                Payment.status != "ANULADO",
+            )
             .group_by(Payment.enrollment_id)
             .all()
         )
@@ -378,6 +382,25 @@ class PaymentService:
         )
 
     @staticmethod
+    def void(db: Session, payment_id: int, reason: str, user) -> Payment:
+        """Anula un pago cobrado (error de digitación, devolución) sin
+        borrarlo: queda en el historial con quién, cuándo y por qué, deja de
+        sumar en caja y en reportes, y la cuota vuelve a quedar por cobrar."""
+        payment = PaymentRepository.get_by_id(db, payment_id)
+        if not payment:
+            raise HTTPException(status_code=404, detail="El pago no existe")
+        if payment.status == "ANULADO":
+            raise HTTPException(status_code=400, detail="El pago ya está anulado")
+        payment.status = "ANULADO"
+        note = f"ANULADO el {date.today():%d/%m/%Y} por {user.full_name}: {reason}"
+        payment.observations = (f"{payment.observations} | {note}" if payment.observations else note)[:500]
+        db.commit()
+        db.refresh(payment)
+        if payment.enrollment and payment.enrollment.status in ("ACTIVA", "PENDIENTE"):
+            PaymentService.refresh_enrollment_statuses(db, [payment.enrollment])
+        return payment
+
+    @staticmethod
     def delete(db: Session, payment_id: int):
 
         payment = PaymentRepository.get_by_id(
@@ -389,6 +412,12 @@ class PaymentService:
             raise HTTPException(
                 status_code=404,
                 detail="El pago no existe"
+            )
+
+        if payment.status != "PENDIENTE":
+            raise HTTPException(
+                status_code=409,
+                detail="Solo se pueden eliminar cuotas pendientes. Un pago cobrado se anula (queda en el historial).",
             )
 
         PaymentRepository.delete(
