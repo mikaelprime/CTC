@@ -24,6 +24,15 @@ class EmailService:
 
     @staticmethod
     def send_payment_confirmation(payment, next_payment_date=None, months_paid=1):
+        try:
+            EmailService._send_payment_confirmation(payment, next_payment_date, months_paid)
+        except Exception:
+            logger.exception(
+                "No se pudo preparar el comprobante de pago #%s", getattr(payment, "id", "?")
+            )
+
+    @staticmethod
+    def _send_payment_confirmation(payment, next_payment_date, months_paid):
         student = payment.enrollment.student
         if not student.email:
             logger.info(
@@ -63,6 +72,15 @@ class EmailService:
 
     @staticmethod
     def send_enrollment_confirmation(enrollment):
+        try:
+            EmailService._send_enrollment_confirmation(enrollment)
+        except Exception:
+            logger.exception(
+                "No se pudo preparar la confirmación de inscripción #%s", getattr(enrollment, "id", "?")
+            )
+
+    @staticmethod
+    def _send_enrollment_confirmation(enrollment):
         student = enrollment.student
         if not student.email:
             logger.info(

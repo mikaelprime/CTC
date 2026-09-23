@@ -1,4 +1,5 @@
 import calendar
+import logging
 from datetime import date, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
@@ -9,6 +10,9 @@ from app.models.payment import Payment
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.enrollment_repository import EnrollmentRepository
 from app.services.email_service import EmailService
+
+logger = logging.getLogger(__name__)
+
 
 class PaymentService:
 
@@ -32,6 +36,11 @@ class PaymentService:
     def _notify_if_paid(payment: Payment):
         if payment.status == "PAGADO":
             EmailService.send_payment_confirmation(payment)
+        else:
+            logger.info(
+                "Pago #%s registrado con estado %s (no PAGADO); no se envía comprobante.",
+                payment.id, payment.status,
+            )
 
     @staticmethod
     def _apply_due_charges(db: Session):
