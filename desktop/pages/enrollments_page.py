@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QInputDialog, QLabel, QMessageBox
 
 from api_client import ApiError, api
 from widgets.crud_page import Column, CrudPage, Field
-from widgets.ticket_printer import print_ticket
+from widgets.ticket_printer import print_ticket, save_ticket_pdf
 from pages.student_history import StudentHistoryDialog
 
 
@@ -184,10 +184,12 @@ class EnrollmentsPage(CrudPage):
             f"Primer pago de colegiatura: {result.get('next_payment_date') or result.get('start_date')}"
         )
         print_button = box.addButton("Imprimir ticket", QMessageBox.ActionRole)
+        pdf_button = box.addButton("Guardar ticket PDF", QMessageBox.ActionRole)
         box.addButton(QMessageBox.Ok)
         box.exec()
-        if box.clickedButton() is print_button:
-            print_ticket(
+        if box.clickedButton() in (print_button, pdf_button):
+            action = print_ticket if box.clickedButton() is print_button else save_ticket_pdf
+            action(
                 self,
                 "Comprobante de matrícula",
                 [

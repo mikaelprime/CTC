@@ -62,3 +62,22 @@ def test_pdf_is_written(tmp_path, qapp):
     path = tmp_path / "reporte.pdf"
     write_pdf(build_report(HISTORY), str(path))
     assert path.read_bytes().startswith(b"%PDF")
+
+
+def test_ticket_pdf_is_a_single_80mm_roll_with_dark_text(tmp_path, qapp):
+    from PySide6.QtPdf import QPdfDocument
+
+    from widgets import ticket_printer
+
+    path = tmp_path / "ticket.pdf"
+    assert ticket_printer.write_ticket_pdf(
+        str(path), "Comprobante de pago", [("Total", "$28.00"), ("Cambio", "$2.00")], "Conserve este comprobante."
+    )
+    document = QPdfDocument()
+    document.load(str(path))
+    assert document.pageCount() == 1
+    width_mm = document.pagePointSize(0).width() * 25.4 / 72
+    assert abs(width_mm - 80) < 1
+    # Antes usaba el color de texto del tema oscuro (#e6ebff): ilegible en papel.
+    html = ticket_printer._ticket_document("T", [("A", "B")], "").toHtml().lower()
+    assert "#e6ebff" not in html

@@ -23,7 +23,7 @@ from widgets.animated_button import AnimatedButton
 from widgets.crud_page import Column, CrudPage, Field
 from widgets.effects import apply_card_shadow
 from widgets.report_export import Report, Section, export_report
-from widgets.ticket_printer import print_ticket
+from widgets.ticket_printer import print_ticket, save_ticket_pdf
 
 
 def _fetch():
@@ -417,10 +417,12 @@ class PaymentsPage(CrudPage):
             f"Próximo pago: {result['next_payment_date']}"
         )
         print_button = box.addButton("Imprimir ticket", QMessageBox.ActionRole)
+        pdf_button = box.addButton("Guardar ticket PDF", QMessageBox.ActionRole)
         box.addButton(QMessageBox.Ok)
         box.exec()
-        if box.clickedButton() is print_button:
-            print_ticket(
+        if box.clickedButton() in (print_button, pdf_button):
+            action = print_ticket if box.clickedButton() is print_button else save_ticket_pdf
+            action(
                 self,
                 "Comprobante de pago",
                 [
