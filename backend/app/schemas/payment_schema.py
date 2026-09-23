@@ -29,6 +29,7 @@ class PaymentUpdate(BaseModel):
 class PaymentResponse(PaymentBase):
     id: int
     cashier_id: Optional[int] = None
+    kind: str = "COLEGIATURA"
     model_config = ConfigDict(from_attributes=True)
 
 class PaymentAdvanceCreate(BaseModel):

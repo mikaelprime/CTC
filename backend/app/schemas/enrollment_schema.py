@@ -15,6 +15,9 @@ class EnrollmentBase(BaseModel):
     end_date: Optional[date] = None
 
     status: Optional[str] = "ACTIVA"
+    # Ver app.core.pricing: COMPLETA/PROMO/GRATIS y GRUPAL/PRIVADO/ONLINE.
+    registration_type: str = "COMPLETA"
+    tuition_plan: str = "GRUPAL"
     observations: Optional[str] = None
 
 class EnrollmentCreate(EnrollmentBase):

@@ -6,7 +6,11 @@ from uuid import uuid4
 from tests.conftest import client
 
 
-MONTHLY_FEE = 40
+# Coincide con TUITION_PLANS["GRUPAL"] (app.core.pricing): el precio ya no
+# sale de Diploma.monthly_fee, sino del plan de colegiatura elegido al
+# inscribir, y estas matrículas no especifican tuition_plan (usan el
+# default "GRUPAL").
+MONTHLY_FEE = 25
 
 
 def auth_headers():

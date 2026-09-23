@@ -22,9 +22,12 @@ class PaymentRepository:
 
     @staticmethod
     def get_last_by_enrollment(db: Session, enrollment_id: int):
+        # Solo colegiatura: la matrícula (kind="MATRICULA") es un cobro
+        # único que no forma parte del ciclo recurrente de 28 días, y
+        # mezclarla aquí desplazaba mal el primer vencimiento de colegiatura.
         return (
             db.query(Payment)
-            .filter(Payment.enrollment_id == enrollment_id)
+            .filter(Payment.enrollment_id == enrollment_id, Payment.kind == "COLEGIATURA")
             .order_by(Payment.due_date.desc())
             .first()
         )

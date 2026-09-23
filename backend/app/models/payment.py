@@ -55,6 +55,12 @@ class Payment(Base):
         default="PENDIENTE"
     )
 
+    # Distingue el cobro único de matrícula (MATRICULA) del ciclo recurrente
+    # de colegiatura cada 28 días (COLEGIATURA). Necesario para que
+    # get_last_by_enrollment() no confunda la matrícula con "la última
+    # cuota de colegiatura" al calcular el próximo vencimiento.
+    kind = Column(String(20), nullable=False, server_default="COLEGIATURA")
+
     cash_received = Column(
         Numeric(10, 2),
         nullable=True

@@ -3,7 +3,8 @@ import logging
 from datetime import date, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from app.core.pricing import TUITION_PLANS
 from app.core.runtime_config import get_institution_config
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment
@@ -91,7 +92,7 @@ class PaymentService:
             if first_due < today and data.apply_late_fee
             else Decimal("0.00")
         )
-        monthly_amount = Decimal(str(enrollment.diploma.monthly_fee))
+        monthly_amount = TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"])
         amount = monthly_amount * data.months
         total = amount + surcharge
         if data.cash_received < total:
@@ -136,20 +137,25 @@ class PaymentService:
         }
 
     @staticmethod
+    def _next_due_date(db: Session, enrollment: Enrollment) -> date:
+        pending = (
+            db.query(Payment)
+            .filter(Payment.enrollment_id == enrollment.id, Payment.status == "PENDIENTE")
+            .order_by(Payment.due_date.asc())
+            .first()
+        )
+        last = PaymentRepository.get_last_by_enrollment(db, enrollment.id)
+        return pending.due_date if pending else (
+            last.due_date + timedelta(days=PaymentService._cycle_days(db))
+            if last else enrollment.start_date
+        )
+
+    @staticmethod
     def next_payment_info(db: Session, enrollment_id: int) -> dict:
         enrollment = EnrollmentRepository.get_by_id(db, enrollment_id)
         if not enrollment:
             raise HTTPException(status_code=404, detail="La matrícula no existe")
-        pending = (
-            db.query(Payment)
-            .filter(Payment.enrollment_id == enrollment_id, Payment.status == "PENDIENTE")
-            .order_by(Payment.due_date.asc())
-            .first()
-        )
-        last = PaymentRepository.get_last_by_enrollment(db, enrollment_id)
-        due_date = pending.due_date if pending else (
-            last.due_date + timedelta(days=PaymentService._cycle_days(db)) if last else enrollment.start_date
-        )
+        due_date = PaymentService._next_due_date(db, enrollment)
         today = date.today()
         surcharge = PaymentService._late_fee(db) if due_date < today else Decimal("0.00")
         return {
@@ -158,10 +164,43 @@ class PaymentService:
             "diploma_name": enrollment.diploma.name,
             "due_date": due_date,
             "days_until_due": (due_date - today).days,
-            "monthly_amount": Decimal(str(enrollment.diploma.monthly_fee)),
+            "monthly_amount": TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"]),
             "automatic_surcharge": surcharge,
             "is_overdue": due_date < today,
         }
+
+    @staticmethod
+    def send_due_reminders(db: Session) -> int:
+        """Manda un recordatorio por correo a los estudiantes cuya próxima
+        colegiatura vence dentro de `alert_days_before` días. Se llama desde
+        el login (best-effort, no bloquea si falla) en vez de un cron: el
+        backend gratuito no tiene forma de "despertar solo" a diario, pero sí
+        se ejecuta cada vez que alguien entra a la app. `last_reminder_due_date`
+        evita mandar el mismo aviso de nuevo en cada login del mismo día.
+        """
+        alert_days = get_institution_config(db).alert_days_before
+        today = date.today()
+        limit = today + timedelta(days=int(alert_days))
+        enrollments = (
+            db.query(Enrollment)
+            .options(joinedload(Enrollment.student), joinedload(Enrollment.diploma))
+            .filter(Enrollment.status == "ACTIVA")
+            .all()
+        )
+        sent = 0
+        for enrollment in enrollments:
+            due_date = PaymentService._next_due_date(db, enrollment)
+            if not (today <= due_date <= limit):
+                continue
+            if enrollment.last_reminder_due_date == due_date:
+                continue
+            amount = TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"])
+            EmailService.send_due_reminder(enrollment, due_date, amount)
+            enrollment.last_reminder_due_date = due_date
+            sent += 1
+        if sent:
+            db.commit()
+        return sent
 
     @staticmethod
     def create(db: Session, data, cashier_id: int | None = None):
@@ -240,7 +279,7 @@ class PaymentService:
                 detail="El número de meses debe ser mayor a cero"
             )
 
-        monthly_fee = Decimal(str(enrollment.diploma.monthly_fee))
+        monthly_fee = TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"])
 
         # El adelanto continúa después de la última cuota ya generada
         last_payment = PaymentRepository.get_last_by_enrollment(

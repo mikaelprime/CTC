@@ -14,10 +14,11 @@ router = APIRouter(
 @router.post("/", response_model=EnrollmentResponse)
 def create_enrollment(
     enrollment: EnrollmentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     try:
-        return EnrollmentService.create(db, enrollment)
+        return EnrollmentService.create(db, enrollment, cashier_id=current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

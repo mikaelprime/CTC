@@ -1,9 +1,10 @@
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 import httpx
 
 from app.core.config import settings
+from app.core.pricing import REGISTRATION_LABELS, TUITION_LABELS, TUITION_PLANS
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,53 @@ class EmailService:
         EmailService._send_email(student.email, f"Comprobante de pago CTC #{payment.id}", html, True)
 
     @staticmethod
+    def send_due_reminder(enrollment, due_date, amount):
+        try:
+            EmailService._send_due_reminder(enrollment, due_date, amount)
+        except Exception:
+            logger.exception(
+                "No se pudo preparar el recordatorio de pago para la inscripción #%s",
+                getattr(enrollment, "id", "?"),
+            )
+
+    @staticmethod
+    def _send_due_reminder(enrollment, due_date, amount):
+        student = enrollment.student
+        if not student.email:
+            logger.info(
+                "Estudiante #%s sin correo registrado; no se envía recordatorio de pago.",
+                student.id,
+            )
+            return
+        days_left = (due_date - date.today()).days
+        html = f"""
+        <!doctype html>
+        <html><body style="margin:0;background:#eef5f4;font-family:Arial;color:#183039">
+          <div style="max-width:640px;margin:32px auto;background:#fff;border-radius:18px;overflow:hidden">
+            <div style="padding:30px 34px;background:#123b43;color:#fff">
+              <div style="font-size:12px;letter-spacing:2px;color:#76e0d1;font-weight:bold">CTC EL SALVADOR</div>
+              <h1 style="margin:12px 0 6px">Tu colegiatura está por vencer</h1>
+              <p style="margin:0;color:#c7e4e1">Faltan {days_left} día(s) para tu próximo pago.</p>
+            </div>
+            <div style="padding:30px 34px">
+              <p style="font-size:16px">Hola <strong>{student.full_name}</strong>,</p>
+              <div style="padding:20px;background:#fff8ec;border-left:5px solid #f59e0b;border-radius:8px">
+                <div style="font-size:12px;color:#8a6d1f;text-transform:uppercase">Monto a pagar</div>
+                <div style="font-size:30px;font-weight:bold;color:#123b43;margin-top:7px">${float(amount):,.2f}</div>
+                <div style="font-size:13px;color:#5d7379">{enrollment.diploma.name}</div>
+              </div>
+              <table style="width:100%;border-collapse:separate;border-spacing:0 10px;font-size:14px;margin-top:18px">
+                <tr><td>Fecha de vencimiento</td><td style="text-align:right;font-weight:bold;color:#b45309">{due_date}</td></tr>
+              </table>
+              <p style="color:#70858b;font-size:12px">Pasado el vencimiento se aplica un recargo por mora. Si ya realizaste el pago, ignora este mensaje.</p>
+            </div>
+            <div style="padding:18px 34px;background:#f5f8f8;color:#84979b;font-size:11px">Recordatorio generado automáticamente por CTC Campus.</div>
+          </div>
+        </body></html>
+        """
+        EmailService._send_email(student.email, f"Recordatorio de pago CTC #{enrollment.id}", html, True)
+
+    @staticmethod
     def send_enrollment_confirmation(enrollment):
         try:
             EmailService._send_enrollment_confirmation(enrollment)
@@ -108,6 +156,8 @@ class EmailService:
                 <tr><td>Fecha de inscripción</td><td style="text-align:right;font-weight:bold">{enrollment.enrollment_date}</td></tr>
                 <tr><td>Inicio de clases</td><td style="text-align:right;font-weight:bold">{enrollment.start_date}</td></tr>
                 <tr><td>Finalización estimada</td><td style="text-align:right;font-weight:bold">{enrollment.end_date}</td></tr>
+                <tr><td>Matrícula</td><td style="text-align:right;font-weight:bold">{REGISTRATION_LABELS.get(enrollment.registration_type, enrollment.registration_type)}</td></tr>
+                <tr><td>Plan de colegiatura</td><td style="text-align:right;font-weight:bold">{TUITION_LABELS.get(enrollment.tuition_plan, enrollment.tuition_plan)} (${TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS['GRUPAL']):,.2f}/mes)</td></tr>
                 <tr><td>Próximo pago</td><td style="text-align:right;font-weight:bold;color:#0b8f7e">{next_payment}</td></tr>
               </table>
               <p style="color:#70858b;font-size:12px">Las colegiaturas se programan cada 28 días.</p>
