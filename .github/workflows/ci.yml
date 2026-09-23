@@ -89,10 +89,19 @@ jobs:
                 python -m pip install --upgrade pip
                 pip install -r requirements-dev.txt
 
+        # Las pruebas de reportes y ticket (PDF/Excel) usan Qt sin pantalla;
+        # PySide6 trae Qt, pero necesita estas librerías gráficas del sistema.
+        -   name: Librerías del sistema para Qt
+            run: |
+                sudo apt-get update
+                sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+
         -   name: Verificar sintaxis
             env:
                 QT_QPA_PLATFORM: offscreen
             run: python -m compileall -q .
 
-        -   name: Ejecutar pruebas de lógica del panel
+        -   name: Ejecutar pruebas del escritorio
+            env:
+                QT_QPA_PLATFORM: offscreen
             run: python -m pytest tests -q
