@@ -20,7 +20,7 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QMarginsF, QSizeF, QStandardPaths
-from PySide6.QtGui import QPageLayout, QPageSize, QTextDocument
+from PySide6.QtGui import QPageLayout, QPageSize, QPainter, QTextDocument
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter, QPrinterInfo
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
@@ -58,13 +58,32 @@ def _ticket_document(title: str, rows: list[tuple[str, str]], footer: str) -> QT
     return document
 
 
+def _content_width_px() -> float:
+    return (_TICKET_WIDTH_MM - 2 * _MARGIN_MM) / _MM_PER_PX
+
+
+def _paint(document: QTextDocument, printer: QPrinter) -> bool:
+    """Dibuja el ticket a su tamaño real (72 mm de contenido), centrado
+    arriba de la hoja. QTextDocument.print_() estiraba el ticket hasta llenar
+    el ancho del papel: en una hoja carta salía gigante y deformado."""
+    document.setTextWidth(_content_width_px())
+    painter = QPainter()
+    if not painter.begin(printer):
+        return False
+    scale = printer.resolution() / 96  # píxeles lógicos -> puntos de la impresora
+    page = printer.pageRect(QPrinter.Unit.DevicePixel)
+    ticket_width = _content_width_px() * scale
+    painter.translate(max(0.0, (page.width() - ticket_width) / 2), 0)
+    painter.scale(scale, scale)
+    document.drawContents(painter)
+    painter.end()
+    return printer.printerState() != QPrinter.PrinterState.Error
+
+
 def _fit_to_roll(document: QTextDocument, printer: QPrinter) -> None:
-    """Ancho de 80 mm y alto justo al contenido (no una hoja carta con el
-    ticket perdido en una esquina)."""
-    content_width_px = (_TICKET_WIDTH_MM - 2 * _MARGIN_MM) / _MM_PER_PX
-    document.setTextWidth(content_width_px)
+    """PDF: ancho de 80 mm y alto justo al contenido."""
+    document.setTextWidth(_content_width_px())
     height_px = document.size().height()
-    document.setPageSize(QSizeF(content_width_px, height_px))
     printer.setPageLayout(QPageLayout(
         QPageSize(QSizeF(_TICKET_WIDTH_MM, height_px * _MM_PER_PX + 2 * _MARGIN_MM),
                   QPageSize.Unit.Millimeter, "Ticket CTC"),
@@ -96,13 +115,9 @@ def print_ticket(parent: QWidget, title: str, rows: list[tuple[str, str]], foote
     dialog.setWindowTitle("Imprimir ticket")
     if dialog.exec() != QPrintDialog.DialogCode.Accepted:
         return
-    # El tamaño de papel lo decide la impresora elegida (rollo o carta); el
-    # ticket se imprime arriba, con su ancho de 80 mm.
-    content_width_px = (_TICKET_WIDTH_MM - 2 * _MARGIN_MM) / _MM_PER_PX
-    document.setTextWidth(content_width_px)
-    document.setPageSize(QSizeF(content_width_px, max(document.size().height(), 1)))
-    document.print_(printer)
-    if printer.printerState() == QPrinter.PrinterState.Error:
+    # El papel lo decide la impresora elegida: en un rollo de 80 mm ocupa
+    # todo el ancho; en una hoja carta/A4 sale centrado arriba, a tamaño real.
+    if not _paint(document, printer):
         answer = QMessageBox.question(
             parent,
             "No se pudo imprimir",
@@ -120,8 +135,7 @@ def write_ticket_pdf(path: str, title: str, rows: list[tuple[str, str]], footer:
     printer.setOutputFileName(path)
     document = _ticket_document(title, rows, footer)
     _fit_to_roll(document, printer)
-    document.print_(printer)
-    return printer.printerState() != QPrinter.PrinterState.Error
+    return _paint(document, printer)
 
 
 def save_ticket_pdf(parent: QWidget, title: str, rows: list[tuple[str, str]], footer: str = "") -> None:
