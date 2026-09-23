@@ -86,7 +86,11 @@ class PaymentService:
             last_payment.due_date + timedelta(days=cycle_days)
             if last_payment else enrollment.start_date
         )
-        surcharge = PaymentService._late_fee(db) if first_due < today else Decimal("0.00")
+        surcharge = (
+            PaymentService._late_fee(db)
+            if first_due < today and data.apply_late_fee
+            else Decimal("0.00")
+        )
         monthly_amount = Decimal(str(enrollment.diploma.monthly_fee))
         amount = monthly_amount * data.months
         total = amount + surcharge

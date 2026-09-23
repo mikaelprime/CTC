@@ -1,6 +1,7 @@
 from datetime import date
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -200,6 +201,8 @@ class PaymentsPage(CrudPage):
         cash = QDoubleSpinBox()
         cash.setRange(0, 1000000)
         cash.setDecimals(2)
+        apply_late_fee = QCheckBox("Aplicar recargo por mora si aplica ($3.00)")
+        apply_late_fee.setChecked(True)
         due_info = QLabel("Selecciona una matrícula para consultar su vencimiento.")
         due_info.setWordWrap(True)
         due_info.setObjectName("PaymentHint")
@@ -213,6 +216,7 @@ class PaymentsPage(CrudPage):
         form.addRow("Plan de pago", months)
         form.addRow("Método", payment_type)
         form.addRow("Efectivo recibido", cash)
+        form.addRow(apply_late_fee)
         form.addRow(due_info)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
@@ -228,6 +232,7 @@ class PaymentsPage(CrudPage):
                 "payment_type": payment_type.currentData(),
                 "cash_received": cash.value(),
                 "months": months.currentData(),
+                "apply_late_fee": apply_late_fee.isChecked(),
             })
         except ApiError as exc:
             QMessageBox.critical(self, "No se pudo registrar el cobro", str(exc))

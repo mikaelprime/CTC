@@ -48,6 +48,10 @@ class PaymentCollectCreate(BaseModel):
     cash_received: Decimal
     months: int = 1
     observations: Optional[str] = None
+    # El cajero puede decidir no aplicar el recargo por mora aunque la
+    # matrícula esté vencida (ej. una excepción autorizada). True por
+    # defecto para no cambiar el comportamiento existente.
+    apply_late_fee: bool = True
 
 
 class PaymentCollectResponse(BaseModel):

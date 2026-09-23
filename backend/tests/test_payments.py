@@ -107,6 +107,32 @@ def test_collect_payment_overdue_applies_surcharge():
     assert data["late"] is True
 
 
+def test_collect_payment_overdue_can_waive_surcharge():
+    """El cajero puede destildar el recargo por mora (ej. excepción
+    autorizada) en vez de que se aplique siempre automáticamente."""
+    headers = auth_headers()
+    overdue_start = date.today() - timedelta(days=40)
+    enrollment = create_enrollment(headers, start_date=overdue_start)
+
+    response = client.post(
+        "/payments/collect",
+        headers=headers,
+        json={
+            "enrollment_id": enrollment["id"],
+            "payment_date": date.today().isoformat(),
+            "cash_received": str(MONTHLY_FEE),
+            "months": 1,
+            "apply_late_fee": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert Decimal(data["surcharge"]) == Decimal("0.00")
+    assert Decimal(data["total"]) == Decimal(MONTHLY_FEE)
+    assert data["late"] is False
+
+
 def test_collect_payment_rejects_insufficient_cash():
     headers = auth_headers()
     today = date.today()
