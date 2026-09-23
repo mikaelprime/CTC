@@ -8,6 +8,8 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from theme_manager import ThemeManager
+from widgets import transitions
+from widgets.async_worker import wait_for_workers
 from windows.login_window import LoginWindow
 from windows.main_window import MainWindow
 from windows.splash_screen import SplashScreen
@@ -86,35 +88,52 @@ class App:
         self.splash = SplashScreen(on_ready=self.show_login)
         self.splash.show_on_current_screen()
 
+    @staticmethod
+    def _dispose(window) -> None:
+        if window is not None:
+            window.close()
+            window.deleteLater()
+
     def show_login(self) -> None:
-        if self.splash:
-            self.splash.close()
-            self.splash.deleteLater()
+        # La carga (al abrir la app) se desvanece antes de mostrar el login;
+        # al cerrar sesión, la ventana principal ya se desvaneció sola.
+        if self.splash and self.splash.isVisible():
+            splash = self.splash
             self.splash = None
-        if self.main_window:
-            self.main_window.close()
-            self.main_window.deleteLater()
+            transitions.fade_out_window(splash, lambda: (self._dispose(splash), self._open_login()))
+            return
+        self._open_login()
+
+    def _open_login(self) -> None:
+        self._dispose(self.splash)
+        self.splash = None
+        self._dispose(self.main_window)
         self.main_window = None
-        if self.login_window:
-            self.login_window.close()
-            self.login_window.deleteLater()
+        self._dispose(self.login_window)
         self.login_window = LoginWindow(on_success=self.show_main)
         self.login_window.show_on_current_screen()
 
     def show_main(self) -> None:
-        if self.login_window:
-            self.login_window.close()
-            self.login_window.deleteLater()
-            self.login_window = None
+        login = self.login_window
+        self.login_window = None
         self.main_window = MainWindow(
             on_logout=self.show_login,
             on_exit=self.qapp.quit,
             theme_manager=self.theme_manager,
         )
-        self.main_window.show_on_current_screen()
+        if login is None or not login.isVisible():
+            transitions.fade_in_window(self.main_window, self.main_window.show_on_current_screen)
+            return
+        # Fundido cruzado: el panel aparece mientras el login se desvanece.
+        transitions.crossfade_windows(
+            login, self.main_window, self.main_window.show_on_current_screen,
+            lambda: self._dispose(login),
+        )
 
     def run(self) -> int:
-        return self.qapp.exec()
+        code = self.qapp.exec()
+        wait_for_workers()
+        return code
 
 
 if __name__ == "__main__":

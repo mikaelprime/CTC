@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from api_client import api
+from widgets import transitions
 from widgets.animated_button import AnimatedButton
 from window_utils import show_maximized_on_current_screen
 from pages.cashiers_page import CashiersPage
@@ -149,6 +150,7 @@ class MainWindow(QMainWindow):
             just_created = True
         self.stack.setCurrentIndex(index)
         widget = self._page_widgets[index]
+        transitions.fade_in_widget(widget, transitions.PAGE_IN_MS)
         # El constructor de cada página ya hace su propia carga inicial;
         # solo se recarga aquí en visitas posteriores.
         if not just_created and hasattr(widget, "reload"):
@@ -172,15 +174,12 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Contraseña actualizada", "Usa la nueva contraseña la próxima vez que inicies sesión.")
 
     def handle_logout(self) -> None:
-        self.close()
         api.logout()
-        self.on_logout()
+        # Se desvanece y luego App.show_login la cierra y abre el login.
+        transitions.fade_out_window(self, self.on_logout)
 
     def handle_exit(self) -> None:
-        if self.on_exit:
-            self.on_exit()
-        else:
-            self.close()
+        transitions.fade_out_window(self, self.on_exit or self.close)
 
     def toggle_theme(self, button: QPushButton) -> None:
         if not self.theme_manager:

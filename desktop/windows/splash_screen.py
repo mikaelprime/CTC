@@ -10,20 +10,15 @@ de login congelada y sin ninguna explicación visible para quien la usa.
 
 import logging
 
-from PySide6.QtCore import QThread, QTimer, Signal
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QLabel, QProgressBar, QVBoxLayout, QWidget
 
 from api_client import api
+from widgets import transitions
+from widgets.async_worker import AsyncWorker
 
 logger = logging.getLogger("ctc_campus.splash")
-
-
-class _HealthCheckWorker(QThread):
-    finished_ok = Signal(bool)
-
-    def run(self) -> None:
-        self.finished_ok.emit(api.ping())
 
 
 class SplashScreen(QWidget):
@@ -72,13 +67,18 @@ class SplashScreen(QWidget):
 
         center_layout.addStretch()
         layout.addWidget(center)
+        self._center = center
 
         self._slow_hint_timer = QTimer(self)
         self._slow_hint_timer.setSingleShot(True)
         self._slow_hint_timer.timeout.connect(self._show_slow_hint)
 
-        self._worker = _HealthCheckWorker(self)
-        self._worker.finished_ok.connect(self._on_finished)
+        # AsyncWorker (no un QThread hijo de la ventana): si la pantalla se
+        # cierra mientras el servidor sigue despertando, el hilo no aborta
+        # el proceso.
+        self._worker = AsyncWorker(api.ping, self)
+        self._worker.succeeded.connect(self._on_finished)
+        self._worker.failed.connect(lambda _message: self._on_finished(False))
 
     @staticmethod
     def _center_flag():
@@ -90,7 +90,10 @@ class SplashScreen(QWidget):
         logger.info("Mostrando pantalla de carga; verificando conexión con el backend…")
         screen = QGuiApplication.primaryScreen().availableGeometry()
         self.setGeometry(screen)
-        self.showFullScreen()
+        # La ventana aparece con un fundido y el contenido entra un instante
+        # después, en vez de mostrarse todo de golpe.
+        transitions.fade_in_window(self, self.showFullScreen)
+        transitions.fade_in_widget(self._center, transitions.CONTENT_IN_MS + 250)
         self.status_label.setText("Conectando con el servidor…")
         self._slow_hint_timer.start(4000)
         self._worker.start()

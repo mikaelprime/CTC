@@ -3,6 +3,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QFormLayout, QGraphicsOpacityEffect, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from api_client import api
+from widgets import transitions
 from widgets.animated_button import AnimatedButton
 from widgets.async_worker import AsyncWorker
 
@@ -82,7 +83,7 @@ class LoginWindow(QWidget):
     def show_on_current_screen(self):
         screen = QGuiApplication.primaryScreen().availableGeometry()
         self.setGeometry(screen)
-        self.showFullScreen()
+        transitions.fade_in_window(self, self.showFullScreen)
         self.fade_animation.start()
 
     def handle_login(self):
