@@ -119,16 +119,16 @@ class EmailService:
         EmailService._send_email(student.email, f"Recordatorio de pago CTC #{enrollment.id}", html, True)
 
     @staticmethod
-    def send_enrollment_confirmation(enrollment):
+    def send_enrollment_confirmation(enrollment, fee=None, cash_received=None, change=None):
         try:
-            EmailService._send_enrollment_confirmation(enrollment)
+            EmailService._send_enrollment_confirmation(enrollment, fee, cash_received, change)
         except Exception:
             logger.exception(
                 "No se pudo preparar la confirmación de inscripción #%s", getattr(enrollment, "id", "?")
             )
 
     @staticmethod
-    def _send_enrollment_confirmation(enrollment):
+    def _send_enrollment_confirmation(enrollment, fee=None, cash_received=None, change=None):
         student = enrollment.student
         if not student.email:
             logger.info(
@@ -136,7 +136,17 @@ class EmailService:
                 student.id, enrollment.id,
             )
             return
-        next_payment = enrollment.start_date + timedelta(days=28)
+        # PDF: el primer pago de colegiatura es el mismo día de inicio de
+        # clases (antes se anunciaba inicio + 28 días, que es el segundo).
+        first_payment = enrollment.start_date
+        payment_rows = ""
+        if fee is not None:
+            payment_rows += f'<tr><td>Monto de matrícula</td><td style="text-align:right;font-weight:bold">${fee:,.2f}</td></tr>'
+        if fee and cash_received is not None:
+            payment_rows += (
+                f'<tr><td>Efectivo recibido</td><td style="text-align:right;font-weight:bold">${cash_received:,.2f}</td></tr>'
+                f'<tr><td>Cambio</td><td style="text-align:right;font-weight:bold">${change:,.2f}</td></tr>'
+            )
         html = f"""
         <!doctype html>
         <html><body style="margin:0;background:#eef5f4;font-family:Arial;color:#183039">
@@ -158,7 +168,8 @@ class EmailService:
                 <tr><td>Finalización estimada</td><td style="text-align:right;font-weight:bold">{enrollment.end_date}</td></tr>
                 <tr><td>Matrícula</td><td style="text-align:right;font-weight:bold">{REGISTRATION_LABELS.get(enrollment.registration_type, enrollment.registration_type)}</td></tr>
                 <tr><td>Plan de colegiatura</td><td style="text-align:right;font-weight:bold">{TUITION_LABELS.get(enrollment.tuition_plan, enrollment.tuition_plan)} (${TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS['GRUPAL']):,.2f}/mes)</td></tr>
-                <tr><td>Próximo pago</td><td style="text-align:right;font-weight:bold;color:#0b8f7e">{next_payment}</td></tr>
+                {payment_rows}
+                <tr><td>Primer pago de colegiatura</td><td style="text-align:right;font-weight:bold;color:#0b8f7e">{first_payment}</td></tr>
               </table>
               <p style="color:#70858b;font-size:12px">Las colegiaturas se programan cada 28 días.</p>
             </div>

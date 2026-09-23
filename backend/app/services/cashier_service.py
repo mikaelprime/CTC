@@ -1,11 +1,27 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, date
+from datetime import date
 from fastapi import HTTPException
 from app.models.cash_register import CashRegister
 from app.models.payment import Payment
 
 class CashierService:
+
+    @staticmethod
+    def _register_totals(db: Session, cashier_id: int, since) -> tuple[float, float]:
+        """(total cobrado, cobrado en efectivo) desde que se abrió la caja.
+        Solo cuenta pagos PAGADO: una cuota PENDIENTE no es dinero recibido.
+        Y el arqueo físico se compara solo contra el efectivo: un cobro con
+        tarjeta o transferencia no está en la gaveta y antes generaba un
+        "faltante" falso por su monto."""
+        base = db.query(func.sum(Payment.total)).filter(
+            Payment.cashier_id == cashier_id,
+            Payment.status == "PAGADO",
+            Payment.created_at >= since,
+        )
+        collected = base.scalar() or 0
+        cash = base.filter(Payment.payment_type == "Efectivo").scalar() or 0
+        return float(collected), float(cash)
 
     @staticmethod
     def open_register(db: Session, cashier_id: int, initial_amount: float) -> CashRegister:
@@ -46,16 +62,14 @@ class CashierService:
     @staticmethod
     def current_register_summary(db: Session, cashier_id: int) -> dict:
         register = CashierService.verify_active_box(db, cashier_id)
-        collected = db.query(func.sum(Payment.amount + Payment.surcharge)).filter(
-            Payment.cashier_id == cashier_id,
-            Payment.status == "PAGADO",
-            Payment.created_at >= register.opened_at,
-        ).scalar() or 0
-        expected = float(register.initial_amount or 0) + float(collected)
+        collected, cash = CashierService._register_totals(db, cashier_id, register.opened_at)
+        expected = float(register.initial_amount or 0) + cash
         return {
             "id": register.id,
             "initial_amount": float(register.initial_amount or 0),
-            "collected_amount": round(float(collected), 2),
+            "collected_amount": round(collected, 2),
+            "cash_amount": round(cash, 2),
+            "non_cash_amount": round(collected - cash, 2),
             "expected_amount": round(expected, 2),
             "is_open": True,
             "opened_at": register.opened_at,
@@ -66,18 +80,13 @@ class CashierService:
         """Cierra la caja diaria y realiza auditoría de sobrantes/faltantes."""
         active_box = CashierService.verify_active_box(db, cashier_id)
 
-        # Suma de pagos procesados hoy en esta caja
-        today_payments = db.query(func.sum(Payment.amount + Payment.surcharge)).filter(
-            Payment.cashier_id == cashier_id,
-            Payment.created_at >= active_box.opened_at
-        ).scalar() or 0.0
-
-        # initial_amount llega como Decimal (columna Numeric); today_payments
-        # también, salvo cuando no hay pagos y el "or 0.0" cae a un float.
-        # Todo a float aquí evita mezclar Decimal y float en la resta.
-        expected_total = float(active_box.initial_amount or 0) + float(today_payments)
+        today_payments, cash_payments = CashierService._register_totals(
+            db, cashier_id, active_box.opened_at
+        )
+        expected_total = float(active_box.initial_amount or 0) + cash_payments
         diff = round(physical_amount - expected_total, 2)
 
+        explanation = (explanation or "").strip() or None
         # Exigir explicación si hay descuadre (Auditoría)
         if diff != 0.0 and not explanation:
             raise HTTPException(
@@ -90,13 +99,18 @@ class CashierService:
         active_box.difference = diff
         active_box.audit_explanation = explanation
         active_box.is_open = False
-        active_box.closed_at = datetime.now()
+        # Misma fuente de hora que opened_at y Payment.created_at (el reloj
+        # de la BD, en UTC); datetime.now() guardaba la hora local del
+        # servidor y dejaba el cierre desfasado respecto a la apertura.
+        active_box.closed_at = func.now()
 
         db.commit()
         return {
             "status": "Caja Cerrada Exitosamente",
             "monto_inicial": float(active_box.initial_amount or 0),
-            "cobrado_sistema": float(today_payments),
+            "cobrado_sistema": round(today_payments, 2),
+            "cobrado_efectivo": round(cash_payments, 2),
+            "cobrado_otros_metodos": round(today_payments - cash_payments, 2),
             "esperado_total": expected_total,
             "reportado_fisico": physical_amount,
             "diferencia": diff,
@@ -111,16 +125,20 @@ class CashierService:
             func.extract('month', CashRegister.closed_at) == month,
             CashRegister.is_open == False,
         ]
+        # payment_date (fecha local del cobro) y no created_at (UTC): con
+        # created_at, lo cobrado después de las 6 p. m. del último día del
+        # mes (UTC-6) caía en el mes siguiente.
         payment_filter = [
-            func.extract('year', Payment.created_at) == year,
-            func.extract('month', Payment.created_at) == month,
+            func.extract('year', Payment.payment_date) == year,
+            func.extract('month', Payment.payment_date) == month,
+            Payment.status == "PAGADO",
         ]
         if cashier_id is not None:
             register_filter.append(CashRegister.cashier_id == cashier_id)
             payment_filter.append(Payment.cashier_id == cashier_id)
 
         registers = db.query(CashRegister).filter(*register_filter).all()
-        collected = db.query(func.sum(Payment.amount + Payment.surcharge)).filter(*payment_filter).scalar() or 0
+        collected = db.query(func.sum(Payment.total)).filter(*payment_filter).scalar() or 0
         physical_total = sum(float(register.real_physical_amount or 0) for register in registers)
         expected_total = sum(float(register.system_expected_amount or 0) for register in registers)
         total_diff = sum(float(register.difference or 0) for register in registers)

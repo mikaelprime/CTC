@@ -87,9 +87,17 @@ class ApiClient:
     @staticmethod
     def _detail(resp: requests.Response) -> Optional[str]:
         try:
-            return resp.json().get("detail")
+            detail = resp.json().get("detail")
         except ValueError:
             return resp.text or None
+        # Un backend sin el manejador de validación en español devuelve una
+        # lista de errores; se muestra como líneas legibles, no como repr().
+        if isinstance(detail, list):
+            return "\n".join(
+                f"{item.get('loc', ['', ''])[-1]}: {item.get('msg', '')}" if isinstance(item, dict) else str(item)
+                for item in detail
+            )
+        return detail
 
     def _headers(self) -> dict:
         headers = {"Content-Type": "application/json"}

@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from tests.conftest import client
+from tests.conftest import client, student_payload
 
 
 def auth_headers():
@@ -75,7 +75,7 @@ def test_deleting_diploma_with_enrollments_is_rejected_not_a_500():
     student = client.post(
         "/students/",
         headers=headers,
-        json={"full_name": "Estudiante Dependencia", "email": f"dep-{uuid4().hex[:8]}@ctc.edu.sv"},
+        json=student_payload(full_name="Estudiante Dependencia", email=f"dep-{uuid4().hex[:8]}@ctc.edu.sv"),
     )
     assert student.status_code == 200
 

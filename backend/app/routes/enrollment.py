@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.session import get_db
-from app.schemas.enrollment_schema import (EnrollmentCreate, EnrollmentResponse)
+from app.schemas.enrollment_schema import (EnrollmentCancel, EnrollmentCreate, EnrollmentResponse)
 from app.services.enrollment_service import EnrollmentService
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_roles
+from app.core.pricing import REGISTRATION_TYPES
+from app.services.cashier_service import CashierService
 
 router = APIRouter(
     prefix="/enrollments",
@@ -17,6 +19,13 @@ def create_enrollment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    # Igual que en /payments: si un cajero cobra la matrícula debe tener la
+    # caja abierta, o esos $20/$10 quedan fuera de todo arqueo.
+    if (
+        current_user.role.name.upper() in {"CAJERO", "CASHIER"}
+        and REGISTRATION_TYPES.get(enrollment.registration_type, 0) > 0
+    ):
+        CashierService.verify_active_box(db, current_user.id)
     try:
         return EnrollmentService.create(db, enrollment, cashier_id=current_user.id)
     except ValueError as exc:
@@ -37,6 +46,19 @@ def get_by_id(
         raise HTTPException(404, "Inscripción no encontrada")
 
     return enrollment
+
+@router.post("/{enrollment_id}/cancel", response_model=EnrollmentResponse)
+def cancel(
+    enrollment_id: int,
+    data: EnrollmentCancel,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_roles("ADMIN", "ADMINISTRADOR")),
+):
+    enrollment = EnrollmentService.cancel(db, enrollment_id, data.reason)
+    if not enrollment:
+        raise HTTPException(404, "Inscripción no encontrada")
+    return enrollment
+
 
 @router.delete("/{enrollment_id}")
 def delete(

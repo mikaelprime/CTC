@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth.dependencies import get_current_user
+from app.core.pricing import TUITION_PLANS
 from app.database.session import get_db
 from app.models.enrollment import Enrollment
-from app.models.payment import Payment
 from app.services.cashier_service import CashierService
+from app.services.payment_service import PaymentService
 
 router = APIRouter(
     prefix="/reports",
@@ -17,32 +18,39 @@ router = APIRouter(
 
 
 @router.get("/upcoming-payments")
-def upcoming_payments(days: int = 7, db: Session = Depends(get_db)):
+def upcoming_payments(days: int = 7, include_overdue: bool = True, db: Session = Depends(get_db)):
+    """Cobros próximos (PDF: "muestra al cajero o administrador los pagos
+    próximos"). Se calcula desde el próximo vencimiento de cada matrícula y
+    no desde filas PENDIENTE en payments: el flujo normal de cobro nunca crea
+    cuotas PENDIENTE por adelantado, así que antes este reporte salía vacío.
+    """
     today = date.today()
     limit = today + timedelta(days=max(0, min(days, 60)))
-    payments = (
-        db.query(Payment)
-        .options(joinedload(Payment.enrollment).joinedload(Enrollment.student))
-        .filter(
-            Payment.status == "PENDIENTE",
-            Payment.due_date >= today,
-            Payment.due_date <= limit,
-        )
-        .order_by(Payment.due_date.asc())
+    enrollments = (
+        db.query(Enrollment)
+        .options(joinedload(Enrollment.student), joinedload(Enrollment.diploma))
+        .filter(Enrollment.status.in_(("ACTIVA", "PENDIENTE")))
         .all()
     )
-    return [
-        {
-            "payment_id": payment.id,
-            "enrollment_id": payment.enrollment_id,
-            "student_name": payment.enrollment.student.full_name,
-            "student_email": payment.enrollment.student.email,
-            "due_date": payment.due_date,
-            "amount": payment.total,
-            "days_remaining": (payment.due_date - today).days,
-        }
-        for payment in payments
-    ]
+    due_dates = PaymentService.refresh_enrollment_statuses(db, enrollments)
+    rows = []
+    for enrollment in enrollments:
+        due_date = due_dates[enrollment.id]
+        if due_date > limit or (due_date < today and not include_overdue):
+            continue
+        rows.append({
+            "enrollment_id": enrollment.id,
+            "student_name": enrollment.student.full_name,
+            "student_email": enrollment.student.email,
+            "diploma_name": enrollment.diploma.name,
+            "status": enrollment.status,
+            "due_date": due_date,
+            "amount": TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"]),
+            "days_remaining": (due_date - today).days,
+            "is_overdue": due_date < today,
+        })
+    rows.sort(key=lambda row: row["due_date"])
+    return rows
 
 
 @router.get("/cashier-monthly")

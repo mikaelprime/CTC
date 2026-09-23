@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from tests.conftest import client
+from tests.conftest import client, student_payload
 
 DEFAULT_CONFIG = {
     "institution_name": "CTC El Salvador",
@@ -34,7 +34,7 @@ def create_enrollment(headers, start_date: date, monthly_fee: int = 40):
     student = client.post(
         "/students/",
         headers=headers,
-        json={"full_name": "Estudiante Config", "email": f"config-{uuid4().hex[:8]}@ctc.edu.sv"},
+        json=student_payload(full_name="Estudiante Config", email=f"config-{uuid4().hex[:8]}@ctc.edu.sv"),
     )
     diploma = client.post(
         "/diplomas/",

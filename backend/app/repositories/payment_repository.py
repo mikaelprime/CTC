@@ -1,4 +1,3 @@
-from datetime import date
 from sqlalchemy.orm import Session
 from app.models.payment import Payment
 
@@ -30,17 +29,6 @@ class PaymentRepository:
             .filter(Payment.enrollment_id == enrollment_id, Payment.kind == "COLEGIATURA")
             .order_by(Payment.due_date.desc())
             .first()
-        )
-
-    @staticmethod
-    def get_due_unpaid(db: Session, today: date):
-        return (
-            db.query(Payment)
-            .filter(
-                Payment.status == "PENDIENTE",
-                Payment.due_date <= today
-            )
-            .all()
         )
 
     @staticmethod

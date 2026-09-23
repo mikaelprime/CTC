@@ -33,6 +33,10 @@ def get_schedules() -> list[dict]:
     return api.get("/schedules/") or []
 
 
+def get_upcoming_payments(days: int = 7) -> list[dict]:
+    return api.get(f"/reports/upcoming-payments?days={days}") or []
+
+
 def load_dashboard_data() -> dict:
     """Trae todo lo que necesita el panel en una sola ronda de peticiones.
 
@@ -45,6 +49,7 @@ def load_dashboard_data() -> dict:
         "students": get_students(),
         "payments": get_payments(),
         "enrollments": get_enrollments(),
+        "upcoming": get_upcoming_payments(),
     }
 
 
@@ -71,6 +76,13 @@ def kpis_generales(data: dict) -> dict:
     pagos_pendientes = sum(float(p["total"]) for p in pendientes)
     vencidos = [p for p in pendientes if _parse_date(p["due_date"]) < today]
 
+    # El cobro normal nunca deja cuotas PENDIENTE en /payments/: la deuda
+    # real (matrículas atrasadas y las que vencen pronto) viene del reporte
+    # de cobros próximos, calculado por el backend a partir del ciclo.
+    upcoming = data.get("upcoming", [])
+    atrasadas = [u for u in upcoming if u.get("is_overdue")]
+    pagos_pendientes += sum(float(u["amount"]) for u in atrasadas)
+
     matriculas_criticas = sum(
         1
         for e in enrollments
@@ -82,8 +94,8 @@ def kpis_generales(data: dict) -> dict:
         "estudiantes_activos": estudiantes_activos,
         "inscripciones_mes": inscripciones_mes,
         "pagos_pendientes": round(pagos_pendientes, 2),
-        "cuotas_por_auditar": len(pendientes),
-        "vencimientos": len(vencidos),
+        "cuotas_por_auditar": len(pendientes) + len(atrasadas),
+        "vencimientos": len(vencidos) + len(upcoming),
         "matriculas_criticas": matriculas_criticas,
     }
 

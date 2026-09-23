@@ -127,15 +127,31 @@ corre sobre HTTPS/443, que no se bloquea.
 
 Nunca publiques `.env` ni compartas sus credenciales.
 
+### Recordatorios de pago (7 días antes)
+
+El backend revisa los vencimientos cada hora por su cuenta y, además, en cada
+inicio de sesión. En el plan gratuito de Render el servicio se duerme sin
+tráfico, así que conviene programar un cron externo gratuito (por ejemplo
+[cron-job.org](https://cron-job.org)) una vez al día:
+
+- URL: `POST https://<tu-backend>.onrender.com/api/cron/reminders`
+- Encabezado: `X-Cron-Secret: <valor de CRON_SECRET>` (Render lo genera; está
+  en `Environment` del servicio)
+
 ## Pruebas
 
-Las pruebas backend deben ejecutarse dentro del contenedor para que puedan resolver
-el hostname de PostgreSQL:
+Las pruebas **nunca** usan el `DATABASE_URL` del `.env` (que apunta a la base
+real): `backend/tests/conftest.py` crea una base SQLite temporal en cada
+corrida, o usa `TEST_DATABASE_URL` si está definida (CI la apunta a su
+PostgreSQL desechable).
 
 ```powershell
-docker compose exec backend alembic upgrade head
-docker compose exec backend pytest tests -q
+cd backend
+..\.venv\Scripts\python.exe -m pytest tests -q
 ```
+
+La prueba de cobros simultáneos necesita PostgreSQL (`SELECT ... FOR UPDATE`)
+y se omite con SQLite; corre en CI.
 
 La lógica de agregación del panel (`desktop/data_service.py`) tiene pruebas
 propias que no necesitan backend ni ventanas:

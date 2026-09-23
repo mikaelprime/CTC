@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlalchemy import event
 
 from app.database.database import engine
-from tests.conftest import client
+from tests.conftest import client, student_payload
 
 
 def auth_headers():
@@ -31,7 +31,7 @@ def create_student(headers):
     response = client.post(
         "/students/",
         headers=headers,
-        json={"full_name": "Estudiante Matricula", "email": email},
+        json=student_payload(full_name="Estudiante Matricula", email=email),
     )
     assert response.status_code == 200
     return response.json()["id"]

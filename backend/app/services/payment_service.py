@@ -1,8 +1,9 @@
-import calendar
 import logging
+from types import SimpleNamespace
 from datetime import date, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.core.pricing import TUITION_PLANS
 from app.core.runtime_config import get_institution_config
@@ -26,14 +27,6 @@ class PaymentService:
         return Decimal(str(get_institution_config(db).late_fee))
 
     @staticmethod
-    def _add_months(base_date: date, months: int) -> date:
-        month_index = base_date.month - 1 + months
-        year = base_date.year + month_index // 12
-        month = month_index % 12 + 1
-        day = min(base_date.day, calendar.monthrange(year, month)[1])
-        return date(year, month, day)
-
-    @staticmethod
     def _notify_if_paid(payment: Payment):
         if payment.status == "PAGADO":
             EmailService.send_payment_confirmation(payment)
@@ -44,17 +37,61 @@ class PaymentService:
             )
 
     @staticmethod
-    def _apply_due_charges(db: Session):
-        due_payments = PaymentRepository.get_due_unpaid(db, date.today())
+    def next_due_dates(db: Session, enrollments: list[Enrollment]) -> dict[int, date]:
+        """Próximo vencimiento de colegiatura de cada matrícula, con dos
+        consultas en total (no dos por matrícula): la cuota PENDIENTE más
+        antigua si existe; si no, la última cuota de colegiatura + ciclo; si
+        aún no hay cuotas, la fecha de inicio de clases."""
+        ids = [enrollment.id for enrollment in enrollments]
+        if not ids:
+            return {}
+        pending = dict(
+            db.query(Payment.enrollment_id, func.min(Payment.due_date))
+            .filter(Payment.enrollment_id.in_(ids), Payment.status == "PENDIENTE")
+            .group_by(Payment.enrollment_id)
+            .all()
+        )
+        last = dict(
+            db.query(Payment.enrollment_id, func.max(Payment.due_date))
+            .filter(Payment.enrollment_id.in_(ids), Payment.kind == "COLEGIATURA")
+            .group_by(Payment.enrollment_id)
+            .all()
+        )
+        cycle = timedelta(days=PaymentService._cycle_days(db))
+        result = {}
+        for enrollment in enrollments:
+            if enrollment.id in pending:
+                result[enrollment.id] = pending[enrollment.id]
+            elif enrollment.id in last:
+                result[enrollment.id] = last[enrollment.id] + cycle
+            else:
+                result[enrollment.id] = enrollment.start_date
+        return result
 
-        if not due_payments:
-            return
-
-        for payment in due_payments:
-            payment.status = "PENDIENTE"
-            if payment.enrollment:
-                payment.enrollment.status = "PENDIENTE"
-        db.commit()
+    @staticmethod
+    def refresh_enrollment_statuses(db: Session, enrollments: list[Enrollment] | None = None) -> dict[int, date]:
+        """PDF: cambiar el estatus del alumno a "PENDIENTE" si se superan los
+        28 días sin registrar un nuevo cobro (su próximo vencimiento ya pasó),
+        y devolverlo a "ACTIVA" cuando se pone al día. Solo toca matrículas
+        ACTIVA/PENDIENTE: un estado puesto a mano (p. ej. FINALIZADA) se
+        respeta. Devuelve el próximo vencimiento por matrícula."""
+        if enrollments is None:
+            enrollments = db.query(Enrollment).filter(
+                Enrollment.status.in_(("ACTIVA", "PENDIENTE"))
+            ).all()
+        due_dates = PaymentService.next_due_dates(db, enrollments)
+        today = date.today()
+        changed = False
+        for enrollment in enrollments:
+            if enrollment.status not in ("ACTIVA", "PENDIENTE"):
+                continue
+            expected = "PENDIENTE" if due_dates[enrollment.id] < today else "ACTIVA"
+            if enrollment.status != expected:
+                enrollment.status = expected
+                changed = True
+        if changed:
+            db.commit()
+        return due_dates
 
     @staticmethod
     def collect(db: Session, data, cashier_id: int | None = None):
@@ -70,23 +107,23 @@ class PaymentService:
         enrollment = EnrollmentRepository.get_by_id(db, data.enrollment_id)
         if not enrollment:
             raise HTTPException(status_code=404, detail="La matrícula no existe")
+        if enrollment.status == "ANULADA":
+            raise HTTPException(status_code=400, detail="La matrícula está anulada; no se le puede cobrar")
         if data.months < 1 or data.months > 12:
             raise HTTPException(status_code=400, detail="Puedes pagar entre 1 y 12 meses")
 
-        PaymentService._apply_due_charges(db)
         today = data.payment_date
-        pending_payment = (
+        # Cuotas ya generadas y aún sin cobrar (p. ej. registradas a mano por
+        # el administrador): se cobran esas primero, en vez de crear cuotas
+        # nuevas con la misma fecha y dejar las viejas PENDIENTE para siempre.
+        pending_payments = (
             db.query(Payment)
             .filter(Payment.enrollment_id == enrollment.id, Payment.status == "PENDIENTE")
             .order_by(Payment.due_date.asc())
-            .first()
+            .all()
         )
         cycle_days = PaymentService._cycle_days(db)
-        last_payment = PaymentRepository.get_last_by_enrollment(db, enrollment.id)
-        first_due = pending_payment.due_date if pending_payment else (
-            last_payment.due_date + timedelta(days=cycle_days)
-            if last_payment else enrollment.start_date
-        )
+        first_due = PaymentService.next_due_dates(db, [enrollment])[enrollment.id]
         surcharge = (
             PaymentService._late_fee(db)
             if first_due < today and data.apply_late_fee
@@ -98,27 +135,33 @@ class PaymentService:
         if data.cash_received < total:
             raise HTTPException(status_code=400, detail=f"El efectivo debe ser de al menos ${total:.2f}")
 
-        payments = []
+        created = []
+        due_date = first_due
         for index in range(data.months):
-            due_date = first_due + timedelta(days=cycle_days * index)
-            payments.append(Payment(
-                enrollment_id=enrollment.id,
-                cashier_id=cashier_id,
-                payment_date=today,
-                due_date=due_date,
-                amount=monthly_amount,
-                surcharge=surcharge if index == 0 else Decimal("0.00"),
-                total=monthly_amount + (surcharge if index == 0 else Decimal("0.00")),
-                payment_type=data.payment_type,
-                status="PAGADO",
-                cash_received=data.cash_received if index == 0 else None,
-                change=(data.cash_received - total) if index == 0 else None,
-                observations=data.observations or f"Cobro de {data.months} mes(es)",
-            ))
-        created = PaymentRepository.create_many(db, payments)
-        enrollment.status = "ACTIVA"
+            fee = surcharge if index == 0 else Decimal("0.00")
+            payment = pending_payments[index] if index < len(pending_payments) else None
+            if payment is None:
+                if created:
+                    due_date = created[-1].due_date + timedelta(days=cycle_days)
+                payment = Payment(enrollment_id=enrollment.id, due_date=due_date, kind="COLEGIATURA")
+                db.add(payment)
+            payment.cashier_id = cashier_id
+            payment.payment_date = today
+            payment.amount = monthly_amount
+            payment.surcharge = fee
+            payment.total = monthly_amount + fee
+            payment.payment_type = data.payment_type
+            payment.status = "PAGADO"
+            payment.cash_received = data.cash_received if index == 0 else None
+            payment.change = (data.cash_received - total) if index == 0 else None
+            payment.observations = data.observations or f"Cobro de {data.months} mes(es)"
+            created.append(payment)
         db.commit()
-        next_payment = created[-1].due_date + timedelta(days=cycle_days)
+        for payment in created:
+            db.refresh(payment)
+        # Puede seguir PENDIENTE si debía varios ciclos y solo pagó uno.
+        due_dates = PaymentService.refresh_enrollment_statuses(db, [enrollment])
+        next_payment = due_dates[enrollment.id]
         EmailService.send_payment_confirmation(
             created[0], next_payment_date=next_payment, months_paid=data.months
         )
@@ -137,25 +180,11 @@ class PaymentService:
         }
 
     @staticmethod
-    def _next_due_date(db: Session, enrollment: Enrollment) -> date:
-        pending = (
-            db.query(Payment)
-            .filter(Payment.enrollment_id == enrollment.id, Payment.status == "PENDIENTE")
-            .order_by(Payment.due_date.asc())
-            .first()
-        )
-        last = PaymentRepository.get_last_by_enrollment(db, enrollment.id)
-        return pending.due_date if pending else (
-            last.due_date + timedelta(days=PaymentService._cycle_days(db))
-            if last else enrollment.start_date
-        )
-
-    @staticmethod
     def next_payment_info(db: Session, enrollment_id: int) -> dict:
         enrollment = EnrollmentRepository.get_by_id(db, enrollment_id)
         if not enrollment:
             raise HTTPException(status_code=404, detail="La matrícula no existe")
-        due_date = PaymentService._next_due_date(db, enrollment)
+        due_date = PaymentService.refresh_enrollment_statuses(db, [enrollment])[enrollment.id]
         today = date.today()
         surcharge = PaymentService._late_fee(db) if due_date < today else Decimal("0.00")
         return {
@@ -167,6 +196,7 @@ class PaymentService:
             "monthly_amount": TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"]),
             "automatic_surcharge": surcharge,
             "is_overdue": due_date < today,
+            "status": enrollment.status,
         }
 
     @staticmethod
@@ -184,12 +214,15 @@ class PaymentService:
         enrollments = (
             db.query(Enrollment)
             .options(joinedload(Enrollment.student), joinedload(Enrollment.diploma))
-            .filter(Enrollment.status == "ACTIVA")
+            .filter(Enrollment.status.in_(("ACTIVA", "PENDIENTE")))
             .all()
         )
+        # Aprovecha la misma pasada para marcar como PENDIENTE a quien ya
+        # se pasó de su fecha (el login es el "cron" de este backend).
+        due_dates = PaymentService.refresh_enrollment_statuses(db, enrollments)
         sent = 0
         for enrollment in enrollments:
-            due_date = PaymentService._next_due_date(db, enrollment)
+            due_date = due_dates[enrollment.id]
             if not (today <= due_date <= limit):
                 continue
             if enrollment.last_reminder_due_date == due_date:
@@ -260,80 +293,39 @@ class PaymentService:
 
     @staticmethod
     def create_advance(db: Session, data, cashier_id: int | None = None):
-
-        # Validar matrícula
-        enrollment = EnrollmentRepository.get_by_id(
+        """Pago adelantado de varias cuotas. Antes generaba las cuotas por
+        mes calendario (no cada 28 días) y dejaba las futuras en PENDIENTE
+        aunque ya se habían pagado, así que aparecían como deuda y un cobro
+        posterior las volvía a cobrar. Ahora reutiliza collect(): mismo ciclo,
+        todas PAGADO y un solo comprobante."""
+        total_hint = None
+        if data.cash_received is None:
+            enrollment = EnrollmentRepository.get_by_id(db, data.enrollment_id)
+            if not enrollment:
+                raise HTTPException(status_code=404, detail="La matrícula no existe")
+            total_hint = TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"]) * max(data.months, 0)
+        result = PaymentService.collect(
             db,
-            data.enrollment_id
+            SimpleNamespace(
+                enrollment_id=data.enrollment_id,
+                payment_date=data.payment_date,
+                payment_type=data.payment_type,
+                cash_received=data.cash_received if data.cash_received is not None else total_hint,
+                months=data.months,
+                observations=data.observations or f"Pago adelantado de {data.months} meses",
+                apply_late_fee=False,
+            ),
+            cashier_id=cashier_id,
         )
-
-        if not enrollment:
-            raise HTTPException(
-                status_code=404,
-                detail="La matrícula no existe"
-            )
-
-        if data.months <= 0:
-            raise HTTPException(
-                status_code=400,
-                detail="El número de meses debe ser mayor a cero"
-            )
-
-        monthly_fee = TUITION_PLANS.get(enrollment.tuition_plan, TUITION_PLANS["GRUPAL"])
-
-        # El adelanto continúa después de la última cuota ya generada
-        last_payment = PaymentRepository.get_last_by_enrollment(
-            db,
-            enrollment.id
+        return (
+            db.query(Payment)
+            .filter(Payment.id.in_(result["payment_ids"]))
+            .order_by(Payment.due_date.asc())
+            .all()
         )
-
-        start_due_date = (
-            PaymentService._add_months(last_payment.due_date, 1)
-            if last_payment else enrollment.start_date
-        )
-
-        payments = []
-
-        for i in range(data.months):
-            due_date = PaymentService._add_months(start_due_date, i)
-
-            # Aunque se paga todo por adelantado, cada cuota solo se
-            # considera cobrada cuando se cumple su fecha de pago
-            status = (
-                "PAGADO" if due_date <= data.payment_date else "PENDIENTE"
-            )
-
-            payments.append(
-                Payment(
-                    enrollment_id=enrollment.id,
-                    cashier_id=cashier_id,
-                    payment_date=data.payment_date,
-                    due_date=due_date,
-                    amount=monthly_fee,
-                    surcharge=Decimal("0.00"),
-                    total=monthly_fee,
-                    payment_type=data.payment_type,
-                    status=status,
-                    cash_received=data.cash_received if i == 0 else None,
-                    change=data.change if i == 0 else None,
-                    observations=(
-                        data.observations
-                        or f"Pago adelantado de {data.months} meses"
-                    ) if i == 0 else f"Cuota {i + 1} de {data.months} (pago adelantado)"
-                )
-            )
-
-        created_payments = PaymentRepository.create_many(db, payments)
-
-        for created in created_payments:
-            PaymentService._notify_if_paid(created)
-
-        return created_payments
 
     @staticmethod
     def get_by_id(db: Session, payment_id: int):
-
-        PaymentService._apply_due_charges(db)
 
         payment = PaymentRepository.get_by_id(
             db,
@@ -350,8 +342,6 @@ class PaymentService:
 
     @staticmethod
     def get_all(db: Session):
-
-        PaymentService._apply_due_charges(db)
 
         return PaymentRepository.get_all(db)
 

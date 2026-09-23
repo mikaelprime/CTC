@@ -1,11 +1,12 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_roles
 from app.auth.security import hash_password
+from app.core import validators
 from app.database.session import get_db
 from app.models.role import Role
 from app.models.user import User
@@ -19,6 +20,26 @@ class CashierCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     birth_date: date
+
+    @field_validator("full_name")
+    @classmethod
+    def _full_name(cls, v):
+        return validators.person_name(v, "El nombre del cajero")
+
+    @field_validator("birth_date")
+    @classmethod
+    def _birth_date(cls, v):
+        # Un cajero es un empleado: debe ser mayor de edad (y no "nacer hoy").
+        return validators.birth_date(v, min_age=18, max_age=80)
+
+    @field_validator("password")
+    @classmethod
+    def _password(cls, v):
+        if v.strip() != v or " " in v:
+            raise ValueError("La contraseña no puede contener espacios")
+        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+            raise ValueError("La contraseña debe tener al menos una letra y un número")
+        return v
 
 
 @router.post("/cashiers", response_model=CashierResponse, status_code=status.HTTP_201_CREATED)

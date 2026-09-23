@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-from datetime import date
 from app.database.database import get_db
-from app.models.student import Student # Tu modelo actualizado con campos del responsable
+from app.models.student import Student
+from app.schemas.student_schema import StudentCreate, StudentUpdate, check_student_consistency
 from app.models.enrollment import Enrollment
 from app.auth.dependencies import get_current_user
 
@@ -14,44 +12,13 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-class StudentCreate(BaseModel):
-    full_name: str
-    age: Optional[int] = None
-    birth_date: Optional[date] = None
-    dui: Optional[str] = None
-    address: Optional[str] = None
-    email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    schooling: Optional[str] = None # Escolaridad (PDF)
-
-    # Campos Obligatorios del Responsable (PDF)
-    responsible_name: Optional[str] = None
-    responsible_dui: Optional[str] = None
-    responsible_kinship: Optional[str] = None # Parentesco (PDF)
-    responsible_email: Optional[EmailStr] = None
-    responsible_whatsapp: Optional[str] = None
-
-
-class StudentUpdate(BaseModel):
-    full_name: Optional[str] = None
-    age: Optional[int] = None
-    birth_date: Optional[date] = None
-    dui: Optional[str] = None
-    address: Optional[str] = None
-    email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    schooling: Optional[str] = None
-
-    responsible_name: Optional[str] = None
-    responsible_dui: Optional[str] = None
-    responsible_kinship: Optional[str] = None
-    responsible_email: Optional[EmailStr] = None
-    responsible_whatsapp: Optional[str] = None
-
-
 @router.post("/")
 def create_student(student: StudentCreate, db: Session = Depends(get_db)):
-    db_student = Student(**student.model_dump())
+    try:
+        data = check_student_consistency(student.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db_student = Student(**data)
     db.add(db_student)
     db.commit()
     db.refresh(db_student)
@@ -63,7 +30,21 @@ def update_student(student_id: int, student: StudentUpdate, db: Session = Depend
     db_student = db.query(Student).filter(Student.id == student_id).first()
     if db_student is None:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-    for key, value in student.model_dump(exclude_unset=True).items():
+    changes = student.model_dump(exclude_unset=True)
+    if "full_name" in changes and changes["full_name"] is None:
+        raise HTTPException(status_code=422, detail="El nombre completo es obligatorio")
+    # Las reglas que cruzan campos (edad, datos del responsable si es menor)
+    # se revisan sobre el registro ya combinado con los cambios.
+    merged = {column.name: getattr(db_student, column.name) for column in Student.__table__.columns}
+    merged.update(changes)
+    if "birth_date" in changes and "age" not in changes:
+        merged["age"] = None  # se recalcula desde la nueva fecha
+    try:
+        merged = check_student_consistency(merged)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    changes["age"] = merged.get("age", db_student.age)
+    for key, value in changes.items():
         setattr(db_student, key, value)
     db.commit()
     db.refresh(db_student)

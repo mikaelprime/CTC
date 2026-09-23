@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from app.database.database import get_db
 from app.auth.dependencies import get_current_user, require_roles
@@ -61,11 +61,11 @@ def monthly_register(
     return CashierService.monthly_closure(db, year, month, cashier_id)
 
 class RegisterOpen(BaseModel):
-    initial_amount: float = 0.0
+    initial_amount: float = Field(0.0, le=100000)
 
 class RegisterClose(BaseModel):
-    physical_amount: float
-    explanation: Optional[str] = None
+    physical_amount: float = Field(le=1000000)
+    explanation: Optional[str] = Field(None, max_length=500)
 
 @router.post("/register/open")
 def open_register(

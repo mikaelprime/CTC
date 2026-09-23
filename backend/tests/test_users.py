@@ -28,7 +28,7 @@ def test_create_cashier_requires_admin():
         json={
             "full_name": "Intento no autorizado",
             "email": f"noauth-{uuid4().hex[:8]}@ctc.edu.sv",
-            "password": "123456",
+            "password": "Cajero2026",
             "birth_date": "1999-01-01",
         },
     )
@@ -44,7 +44,7 @@ def test_list_cashiers_never_exposes_password_hash():
         json={
             "full_name": "Cajero Pytest",
             "email": f"cajero-{uuid4().hex[:8]}@ctc.edu.sv",
-            "password": "123456",
+            "password": "Cajero2026",
             "birth_date": "1999-01-01",
         },
     )

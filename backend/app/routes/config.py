@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user, require_roles
@@ -13,10 +13,11 @@ router = APIRouter(
 )
 
 class ConfigUpdate(BaseModel):
-    institution_name: str = "CTC El Salvador"
-    late_fee: float = 3.00
-    payment_cycle_days: int = 28
-    alert_days_before: int = 7
+    institution_name: str = Field("CTC El Salvador", min_length=1)
+    late_fee: float = Field(3.00, ge=0)
+    # Un ciclo de 0 días (o negativo) rompería el cálculo de vencimientos.
+    payment_cycle_days: int = Field(28, ge=1, le=365)
+    alert_days_before: int = Field(7, ge=0, le=60)
 
 
 def _as_dict(config) -> dict:

@@ -12,6 +12,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
 )
 
 from api_client import ApiError, api
@@ -70,10 +73,10 @@ class PaymentsPage(CrudPage):
         ]
         create_spec = None if self.is_cashier else [
             Field("enrollment_id", "Matrícula", kind="combo", options=_enrollment_options),
-            Field("payment_date", "Fecha de pago", kind="date"),
-            Field("due_date", "Fecha de vencimiento", kind="date"),
-            Field("amount", "Monto (USD)", kind="float", default=0.0, maximum=100_000),
-            Field("surcharge", "Recargo (USD)", kind="float", default=0.0, maximum=10_000),
+            Field("payment_date", "Fecha de pago", kind="date", min_days=-365, max_days=0),
+            Field("due_date", "Fecha de vencimiento", kind="date", min_days=-730, max_days=730),
+            Field("amount", "Monto (USD)", kind="float", default=0.0, maximum=10_000),
+            Field("surcharge", "Recargo (USD)", kind="float", default=0.0, maximum=1_000),
             Field("payment_type", "Método de pago", kind="combo", options=lambda: _TYPE_OPTIONS),
             Field("status", "Estado", kind="combo", options=lambda: _STATUS_OPTIONS),
         ]
@@ -92,6 +95,50 @@ class PaymentsPage(CrudPage):
         self._add_register_controls()
         if self.is_cashier:
             self._add_collect_button()
+        self._add_upcoming_button()
+
+    def _add_upcoming_button(self):
+        # PDF: "muestra al cajero o administrador los pagos próximos".
+        button = AnimatedButton("Próximos cobros")
+        button.clicked.connect(self.show_upcoming)
+        self.layout().insertWidget(3, button)
+
+    def show_upcoming(self):
+        try:
+            rows = api.get("/reports/upcoming-payments?days=7") or []
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudieron cargar los cobros próximos", str(exc))
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Cobros próximos (7 días) y atrasados")
+        dialog.setMinimumSize(720, 380)
+        layout = QVBoxLayout(dialog)
+        if not rows:
+            layout.addWidget(QLabel("No hay cobros próximos ni matrículas atrasadas."))
+        headers = ["Matrícula", "Estudiante", "Programa", "Vence", "Días", "Monto", "Estado"]
+        table = QTableWidget(len(rows), len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        for index, row in enumerate(rows):
+            days = int(row["days_remaining"])
+            values = [
+                f"#{row['enrollment_id']}",
+                row["student_name"],
+                row["diploma_name"],
+                str(row["due_date"]),
+                f"Atrasado {abs(days)}" if days < 0 else ("Hoy" if days == 0 else str(days)),
+                f"${float(row['amount']):,.2f}",
+                row["status"],
+            ]
+            for column, value in enumerate(values):
+                table.setItem(index, column, QTableWidgetItem(value))
+        table.resizeColumnsToContents()
+        layout.addWidget(table)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec()
 
     def _add_collect_button(self):
         button = AnimatedButton("Cobrar colegiatura")
@@ -202,28 +249,57 @@ class PaymentsPage(CrudPage):
         cash = QDoubleSpinBox()
         cash.setRange(0, 1000000)
         cash.setDecimals(2)
-        apply_late_fee = QCheckBox("Aplicar recargo por mora si aplica ($3.00)")
+        cash.setPrefix("$ ")
+        apply_late_fee = QCheckBox("Aplicar recargo por mora (si está vencida)")
         apply_late_fee.setChecked(True)
         due_info = QLabel("Selecciona una matrícula para consultar su vencimiento.")
         due_info.setWordWrap(True)
         due_info.setObjectName("PaymentHint")
-        enrollment.currentIndexChanged.connect(
-            lambda: self.update_due_info(enrollment, months, due_info)
-        )
-        months.currentIndexChanged.connect(
-            lambda: self.update_due_info(enrollment, months, due_info)
-        )
+        # PDF punto 4: el cajero digita el "Efectivo:" y el sistema calcula
+        # el "Cambio:" al instante, antes de confirmar el cobro.
+        total_label = QLabel("$0.00")
+        change_label = QLabel("$0.00")
+        change_label.setObjectName("PaymentHint")
+        state = {"info": None}
+
+        def recalculate():
+            info = state["info"]
+            if info is None:
+                total_label.setText("—")
+                change_label.setText("—")
+                return
+            surcharge = float(info["automatic_surcharge"]) if apply_late_fee.isChecked() else 0.0
+            total = float(info["monthly_amount"]) * int(months.currentData()) + surcharge
+            total_label.setText(
+                f"${total:,.2f}" + (f"  (incluye mora ${surcharge:,.2f})" if surcharge else "")
+            )
+            change = cash.value() - total
+            change_label.setText(
+                f"${change:,.2f}" if change >= 0 else f"Faltan ${-change:,.2f}"
+            )
+            buttons.button(QDialogButtonBox.Ok).setEnabled(change >= 0)
+
+        def reload_info():
+            state["info"] = self.update_due_info(enrollment, due_info)
+            recalculate()
+
+        enrollment.currentIndexChanged.connect(reload_info)
+        months.currentIndexChanged.connect(recalculate)
+        apply_late_fee.toggled.connect(recalculate)
+        cash.valueChanged.connect(recalculate)
         form.addRow("Estudiante / matrícula", enrollment)
         form.addRow("Plan de pago", months)
         form.addRow("Método", payment_type)
-        form.addRow("Efectivo recibido", cash)
         form.addRow(apply_late_fee)
         form.addRow(due_info)
+        form.addRow("Total a cobrar:", total_label)
+        form.addRow("Efectivo:", cash)
+        form.addRow("Cambio:", change_label)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
-        self.update_due_info(enrollment, months, due_info)
+        reload_info()
         if dialog.exec() != QDialog.Accepted:
             return
         try:
@@ -271,20 +347,21 @@ class PaymentsPage(CrudPage):
                 footer="Conserve este comprobante.",
             )
 
-    def update_due_info(self, enrollment, months, label):
+    def update_due_info(self, enrollment, label):
         if enrollment.currentData() is None:
-            return
+            return None
         try:
             info = api.get(f"/payments/next/{enrollment.currentData()}")
-            amount = float(info["monthly_amount"]) * int(months.currentData())
-            surcharge = float(info["automatic_surcharge"])
-            label.setText(
-                f"Vence: {info['due_date']} ({info['days_until_due']} días) · "
-                f"Total estimado: ${amount + surcharge:,.2f} "
-                f"({'incluye mora de $3.00' if surcharge else 'sin mora'})"
-            )
         except ApiError as exc:
             label.setText(str(exc))
+            return None
+        days = int(info["days_until_due"])
+        when = f"atrasada {abs(days)} días" if days < 0 else f"en {days} días"
+        label.setText(
+            f"Vence: {info['due_date']} ({when}) · "
+            f"Cuota: ${float(info['monthly_amount']):,.2f} · Estado: {info.get('status', '—')}"
+        )
+        return info
 
     def close_register(self):
         dialog = QDialog(self)

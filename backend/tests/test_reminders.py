@@ -12,7 +12,7 @@ from uuid import uuid4
 from app.database.database import SessionLocal
 from app.models.enrollment import Enrollment
 from app.services.payment_service import PaymentService
-from tests.conftest import client
+from tests.conftest import client, student_payload
 
 
 def auth_headers():
@@ -28,7 +28,7 @@ def create_enrollment(headers, start_date: date):
     student = client.post(
         "/students/",
         headers=headers,
-        json={"full_name": "Estudiante Recordatorio", "email": f"rec-{uuid4().hex[:8]}@ctc.edu.sv"},
+        json=student_payload(full_name="Estudiante Recordatorio", email=f"rec-{uuid4().hex[:8]}@ctc.edu.sv"),
     )
     assert student.status_code == 200
 
@@ -58,7 +58,7 @@ def create_enrollment(headers, start_date: date):
             "student_id": student.json()["id"],
             "diploma_id": diploma.json()["id"],
             "schedule_id": schedule.json()["id"],
-            "enrollment_date": start_date.isoformat(),
+            "enrollment_date": min(start_date, date.today()).isoformat(),
             "start_date": start_date.isoformat(),
         },
     )

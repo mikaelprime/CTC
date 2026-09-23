@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from tests.conftest import client
+from tests.conftest import VALID_DUI, client, student_payload
 
 
 def auth_headers():
@@ -21,7 +21,7 @@ def test_get_student_by_id():
     created = client.post(
         "/students/",
         headers=auth_headers(),
-        json={"full_name": "Lookup Student", "email": email},
+        json=student_payload(full_name="Lookup Student", email=email),
     )
     assert created.status_code == 200
     response = client.get(
@@ -51,7 +51,7 @@ def test_create_student():
             "address": "Santa Ana",
             "schooling": "Bachillerato",
             "responsible_name": "Padre Pytest",
-            "responsible_dui": "01090300-8",
+            "responsible_dui": VALID_DUI,
             "responsible_kinship": "Padre",
             "responsible_email": "padre@ctc.edu.sv",
             "responsible_whatsapp": "7777-8888",
@@ -69,14 +69,14 @@ def test_create_student():
     # no descartarse silenciosamente por un esquema desalineado.
     assert data["contact_phone"] == "7777-7777"
     assert data["responsible_name"] == "Padre Pytest"
-    assert data["responsible_dui"] == "01090300-8"
+    assert data["responsible_dui"] == VALID_DUI
 
 def test_update_student():
     email = f"update-{uuid4().hex[:8]}@ctc.edu.sv"
     created = client.post(
         "/students/",
         headers=auth_headers(),
-        json={"full_name": "Nombre Original", "email": email},
+        json=student_payload(full_name="Nombre Original", email=email),
     )
     assert created.status_code == 200
 
@@ -146,7 +146,7 @@ def test_deleting_student_with_enrollments_is_rejected_not_a_500():
     student = client.post(
         "/students/",
         headers=headers,
-        json={"full_name": "Estudiante Con Matricula", "email": f"conmat-{uuid4().hex[:8]}@ctc.edu.sv"},
+        json=student_payload(full_name="Estudiante Con Matricula", email=f"conmat-{uuid4().hex[:8]}@ctc.edu.sv"),
     )
     assert student.status_code == 200
 

@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from PySide6.QtCore import QDate, QTime, Qt, QTimer
+from PySide6.QtCore import QDate, QRegularExpression, QTime, Qt, QTimer
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -44,28 +45,77 @@ class Field:
     default: Any = None
     minimum: float = 0
     maximum: float = 10_000_000
+    # Texto: ayuda visible, caracteres permitidos (regex de Qt, bloquea al
+    # teclear, p. ej. letras en un teléfono), máscara fija (DUI) y largo.
+    placeholder: Optional[str] = None
+    regex: Optional[str] = None
+    input_mask: Optional[str] = None
+    max_length: Optional[int] = None
+    # Fecha: rango permitido en días relativos a hoy (p. ej. un nacimiento
+    # no puede ser hoy ni futuro: max_days=-1). None = sin límite.
+    min_days: Optional[int] = None
+    max_days: Optional[int] = None
+    # Fecha inicial en días relativos a hoy (por defecto, hoy).
+    default_days: int = 0
+    # Texto obligatorio: se avisa antes de enviar.
+    required: bool = False
 
 
 class RecordDialog(QDialog):
-    def __init__(self, title: str, fields: list[Field], parent=None, initial: Optional[dict] = None):
+    def __init__(
+        self,
+        title: str,
+        fields: list[Field],
+        parent=None,
+        initial: Optional[dict] = None,
+        submit: Optional[Callable[[dict], Any]] = None,
+    ):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(360)
         self.fields = fields
         self.inputs: dict[str, QWidget] = {}
+        # Si hay `submit`, el diálogo envía los datos él mismo y solo se
+        # cierra si el servidor los acepta: ante un error de validación se
+        # muestra el mensaje y se queda abierto para corregir, sin perder lo
+        # ya escrito.
+        self.submit = submit
+        self.result_data: Any = None
 
-        layout = QFormLayout(self)
+        self.form = QFormLayout(self)
         for f in fields:
             widget = self._build_widget(f)
             if initial and f.name in initial and initial[f.name] is not None:
                 self._apply_value(widget, f, initial[f.name])
             self.inputs[f.name] = widget
-            layout.addRow(f.label, widget)
+            self.form.addRow(f"{f.label} *" if f.required else f.label, widget)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self._on_accept)
+        self.buttons.rejected.connect(self.reject)
+        self.form.addRow(self.buttons)
+
+    def add_row(self, label: str, widget: QWidget) -> None:
+        """Agrega una fila extra (p. ej. "Cambio:") justo antes de los botones."""
+        self.form.insertRow(self.form.rowCount() - 1, label, widget)
+
+    def _on_accept(self) -> None:
+        missing = [
+            f.label for f in self.fields
+            if f.required and f.kind == "text" and not self.inputs[f.name].text().strip()
+        ]
+        if missing:
+            QMessageBox.warning(self, "Faltan datos", "Completa: " + ", ".join(missing))
+            return
+        if self.submit is None:
+            self.accept()
+            return
+        try:
+            self.result_data = self.submit(self.values())
+        except ApiError as exc:
+            QMessageBox.critical(self, "Revisa los datos", str(exc))
+            return
+        self.accept()
 
     @staticmethod
     def _apply_value(widget: QWidget, f: Field, value: Any) -> None:
@@ -101,7 +151,13 @@ class RecordDialog(QDialog):
         if f.kind == "date":
             w = QDateEdit()
             w.setCalendarPopup(True)
-            w.setDate(QDate.currentDate())
+            w.setDisplayFormat("dd/MM/yyyy")
+            today = QDate.currentDate()
+            if f.min_days is not None:
+                w.setMinimumDate(today.addDays(f.min_days))
+            if f.max_days is not None:
+                w.setMaximumDate(today.addDays(f.max_days))
+            w.setDate(today.addDays(f.default_days))
             return w
         if f.kind == "time":
             w = QTimeEdit()
@@ -118,6 +174,14 @@ class RecordDialog(QDialog):
             w.addItem("No", False)
             return w
         w = QLineEdit()
+        if f.input_mask:
+            w.setInputMask(f.input_mask)
+        if f.regex:
+            w.setValidator(QRegularExpressionValidator(QRegularExpression(f.regex), w))
+        if f.max_length:
+            w.setMaxLength(f.max_length)
+        if f.placeholder:
+            w.setPlaceholderText(f.placeholder)
         if f.default is not None:
             w.setText(str(f.default))
         return w
@@ -137,7 +201,11 @@ class RecordDialog(QDialog):
             elif f.kind in ("combo", "bool"):
                 result[f.name] = w.currentData()
             else:
-                result[f.name] = w.text()
+                text = w.text().strip()
+                # Con máscara (DUI) un campo vacío devuelve solo el guion.
+                if f.input_mask and not any(ch.isalnum() for ch in text):
+                    text = ""
+                result[f.name] = text
         return result
 
 
@@ -157,6 +225,7 @@ class CrudPage(QWidget):
         edit_spec: Optional[list[Field]] = None,
         update_fn: Optional[Callable[[dict, dict], Any]] = None,
         empty_message: str = "No hay registros todavía.",
+        extra_actions: Optional[list[tuple[str, Callable[[dict], Any], Callable[[dict], bool]]]] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -167,6 +236,8 @@ class CrudPage(QWidget):
         self.delete_fn = delete_fn
         self.edit_spec = edit_spec
         self.update_fn = update_fn
+        # (texto del botón, acción(fila), visible_para(fila))
+        self.extra_actions = extra_actions or []
         self.empty_message = empty_message
         self._rows: list[dict] = []
         self._search_cache: list[str] = []
@@ -204,7 +275,7 @@ class CrudPage(QWidget):
             toolbar.addWidget(add_btn)
         layout.addLayout(toolbar)
 
-        self._has_actions = bool(delete_fn or (edit_spec and update_fn))
+        self._has_actions = bool(delete_fn or (edit_spec and update_fn) or self.extra_actions)
         extra_cols = 1 if self._has_actions else 0
         self.table = QTableWidget()
         self.table.setColumnCount(len(columns) + extra_cols)
@@ -277,6 +348,13 @@ class CrudPage(QWidget):
                         edit_btn.setStyleSheet("padding: 3px 10px;")
                         edit_btn.clicked.connect(lambda _checked=False, row=row: self.on_edit(row))
                         cell_layout.addWidget(edit_btn)
+                    for label, action, visible in self.extra_actions:
+                        if not visible(row):
+                            continue
+                        extra_btn = QPushButton(label)
+                        extra_btn.setStyleSheet("padding: 3px 10px;")
+                        extra_btn.clicked.connect(lambda _checked=False, row=row, action=action: action(row))
+                        cell_layout.addWidget(extra_btn)
                     if self.delete_fn:
                         del_btn = QPushButton("Eliminar")
                         del_btn.setStyleSheet("padding: 3px 10px;")
@@ -294,27 +372,28 @@ class CrudPage(QWidget):
             return " ".join(self._search_text(item) for item in value)
         return str(value)
 
+    def prepare_dialog(self, dialog: RecordDialog) -> None:
+        """Gancho para que una página agregue lógica al formulario (p. ej.
+        calcular la edad o el cambio en vivo)."""
+
+    def after_create(self, result: Any) -> None:
+        """Gancho que recibe la respuesta del servidor tras crear."""
+
     def on_create(self) -> None:
-        dialog = RecordDialog(f"Registrar", self.create_spec, self)
+        dialog = RecordDialog("Registrar", self.create_spec, self, submit=self.create_fn)
+        self.prepare_dialog(dialog)
         if dialog.exec() != QDialog.Accepted:
             return
-        payload = dialog.values()
-        try:
-            self.create_fn(payload)
-        except ApiError as exc:
-            QMessageBox.critical(self, "Error", str(exc))
-            return
+        self.after_create(dialog.result_data)
         self.reload()
 
     def on_edit(self, row: dict) -> None:
-        dialog = RecordDialog("Editar registro", self.edit_spec, self, initial=row)
+        dialog = RecordDialog(
+            "Editar registro", self.edit_spec, self, initial=row,
+            submit=lambda payload: self.update_fn(row, payload),
+        )
+        self.prepare_dialog(dialog)
         if dialog.exec() != QDialog.Accepted:
-            return
-        payload = dialog.values()
-        try:
-            self.update_fn(row, payload)
-        except ApiError as exc:
-            QMessageBox.critical(self, "Error", str(exc))
             return
         self.reload()
 

@@ -23,3 +23,6 @@ services:
         sync: false
       - key: EMAIL_FROM_NAME
         value: CTC El Salvador
+      # Clave para POST /api/cron/reminders (cron externo diario).
+      - key: CRON_SECRET
+        generateValue: true

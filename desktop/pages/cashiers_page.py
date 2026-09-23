@@ -1,3 +1,5 @@
+from datetime import date
+
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -55,8 +57,10 @@ class CashiersPage(QWidget):
         self.month = QComboBox()
         for number in range(1, 13):
             self.month.addItem(f"{number:02d}", number)
-        self.month.setCurrentIndex(8)
-        self.year = QLineEdit("2026")
+        # Antes quedaba fijo en septiembre de 2026.
+        self.month.setCurrentIndex(date.today().month - 1)
+        self.year = QLineEdit(str(date.today().year))
+        self.year.setInputMask("9999")
         self.cashier_filter = QComboBox()
         self.cashier_filter.addItem("Todos los cajeros", None)
         try:
@@ -90,15 +94,23 @@ class CashiersPage(QWidget):
         self.load_monthly_report()
 
     def create_cashier(self):
-        fields = [Field("full_name", "Nombre completo"), Field("email", "Correo"), Field("password", "Contraseña"), Field("birth_date", "Fecha de nacimiento", kind="date")]
-        dialog = RecordDialog("Crear cajero", fields, self)
+        fields = [
+            Field("full_name", "Nombre completo", regex=r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' \-]*$",
+                  max_length=150, placeholder="Nombre y apellido", required=True),
+            Field("email", "Correo", regex=r"^\S*$", max_length=120, required=True),
+            Field("password", "Contraseña", regex=r"^\S*$", max_length=128,
+                  placeholder="Mínimo 6, con letras y números", required=True),
+            # Un cajero es un empleado mayor de edad: el calendario no permite
+            # elegir hoy, una fecha futura ni menos de 18 años.
+            Field("birth_date", "Fecha de nacimiento", kind="date",
+                  min_days=-365 * 80, max_days=-(365 * 18 + 5), default_days=-365 * 25),
+        ]
+        dialog = RecordDialog(
+            "Crear cajero", fields, self,
+            submit=lambda values: api.post("/users/cashiers", json=values),
+        )
         dialog.inputs["password"].setEchoMode(QLineEdit.Password)
         if dialog.exec() != QDialog.Accepted:
-            return
-        try:
-            api.post("/users/cashiers", json=dialog.values())
-        except ApiError as exc:
-            QMessageBox.critical(self, "No se pudo crear el cajero", str(exc))
             return
         QMessageBox.information(self, "Cajero creado", "El cajero ya puede iniciar sesión con su correo.")
         self.reload()
