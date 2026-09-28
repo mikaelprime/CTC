@@ -7,9 +7,11 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from api_client import api
 from theme_manager import ThemeManager
 from widgets import transitions
 from widgets.async_worker import wait_for_workers
+from windows.change_password import change_password_dialog
 from windows.login_window import LoginWindow
 from windows.main_window import MainWindow
 from windows.splash_screen import SplashScreen
@@ -114,6 +116,11 @@ class App:
         self.login_window.show_on_current_screen()
 
     def show_main(self) -> None:
+        # Contraseña temporal: hay que cambiarla antes de entrar (la API
+        # rechaza todo lo demás mientras tanto). Si cancela, sigue en el login.
+        if api.must_change_password and not change_password_dialog(self.login_window, required=True):
+            api.logout()
+            return
         login = self.login_window
         self.login_window = None
         self.main_window = MainWindow(

@@ -1,16 +1,18 @@
 from datetime import date
 
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QComboBox,
+    QDateEdit,
     QDialog,
-    QFormLayout,
-    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
-    QPushButton,
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -18,104 +20,99 @@ from PySide6.QtWidgets import (
 )
 
 from api_client import ApiError, api
+from pages import cash_reports
 from widgets.animated_button import AnimatedButton
 from widgets.crud_page import Field, RecordDialog
-from widgets.report_export import Report, Section, export_report
+from widgets.receipt_view import money
 
 
 class CashiersPage(QWidget):
+    """Administración de cajeros y auditoría de cajas: cada apertura y cierre
+    con su arqueo, y los cierres diario y mensual (PDF punto 5)."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        header = QLabel("Cajeros y cajas")
+        header = QLabel("Cajeros y cierres de caja")
         header.setObjectName("PageTitle")
-        sub = QLabel("Usuarios cajero, aperturas, cierres y auditorías")
+        sub = QLabel("Usuarios cajero, aperturas, cierres con arqueo, cierre diario y mensual")
         sub.setObjectName("PageSubtitle")
         layout.addWidget(header)
         layout.addWidget(sub)
 
+        # -------------------------------------------------- cajeros
+        users_box = QGroupBox("Cajeros")
+        users_layout = QVBoxLayout(users_box)
         add_button = AnimatedButton("➕ Crear cajero")
         add_button.setProperty("class", "primary")
         add_button.clicked.connect(self.create_cashier)
-        layout.addWidget(add_button)
-
-        # Cuentas de cajero: desactivar a quien deja de trabajar (no se
-        # borra, sus cobros siguen en los reportes) y restablecer contraseñas.
+        users_layout.addWidget(add_button)
+        # Desactivar a quien deja de trabajar (no se borra: sus cobros siguen
+        # en los reportes) y restablecer contraseñas (quedan temporales).
         self.cashiers_table = QTableWidget()
         self.cashiers_table.setColumnCount(4)
         self.cashiers_table.setHorizontalHeaderLabels(["Cajero", "Correo", "Estado", "Acciones"])
         self.cashiers_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.cashiers_table.verticalHeader().setVisible(False)
         self.cashiers_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.cashiers_table.setMaximumHeight(200)
-        layout.addWidget(self.cashiers_table)
+        self.cashiers_table.setMaximumHeight(180)
+        users_layout.addWidget(self.cashiers_table)
+        layout.addWidget(users_box)
 
-        summary_grid = QGridLayout()
-        self.summary_labels = {}
-        for index, (key, title) in enumerate((
-            ("cajas_cerradas", "Cajas cerradas"),
-            ("total_cobrado_mes", "Cobrado en pagos"),
-            ("total_efectivo_contado", "Efectivo contado"),
-            ("total_descuadres_mes", "Descuadres"),
-        )):
-            label = QLabel("—")
-            label.setObjectName("SummaryValue")
-            caption = QLabel(title)
-            caption.setObjectName("SummaryCaption")
-            summary_grid.addWidget(caption, 0, index)
-            summary_grid.addWidget(label, 1, index)
-            self.summary_labels[key] = label
-        layout.addLayout(summary_grid)
-
-        report_row = QGridLayout()
+        # -------------------------------------------------- cierres
+        reports_box = QGroupBox("Cierres de caja")
+        reports_layout = QHBoxLayout(reports_box)
+        self.cashier_filter = QComboBox()
+        self.cashier_filter.addItem("Todos los cajeros", None)
+        self.day = QDateEdit(QDate.currentDate())
+        self.day.setCalendarPopup(True)
+        self.day.setDisplayFormat("dd/MM/yyyy")
+        self.day.setMaximumDate(QDate.currentDate())
+        daily_button = AnimatedButton("Ver cierre del día")
+        daily_button.clicked.connect(self.show_daily)
         self.month = QComboBox()
         for number in range(1, 13):
             self.month.addItem(f"{number:02d}", number)
-        # Antes quedaba fijo en septiembre de 2026.
         self.month.setCurrentIndex(date.today().month - 1)
-        self.year = QLineEdit(str(date.today().year))
-        self.year.setInputMask("9999")
-        self.cashier_filter = QComboBox()
-        self.cashier_filter.addItem("Todos los cajeros", None)
-        try:
-            for cashier in api.get("/users/cashiers") or []:
-                self.cashier_filter.addItem(cashier["full_name"], cashier["id"])
-        except ApiError:
-            pass
-        report_button = AnimatedButton("Actualizar cierre mensual")
-        report_button.clicked.connect(self.load_monthly_report)
-        report_row.addWidget(QLabel("Mes"), 0, 0)
-        report_row.addWidget(self.month, 0, 1)
-        report_row.addWidget(QLabel("Año"), 0, 2)
-        report_row.addWidget(self.year, 0, 3)
-        report_row.addWidget(QLabel("Cajero"), 0, 4)
-        report_row.addWidget(self.cashier_filter, 0, 5)
-        report_row.addWidget(report_button, 0, 6)
-        export_button = AnimatedButton("Exportar Excel / PDF")
-        export_button.clicked.connect(self.export_closure)
-        report_row.addWidget(export_button, 0, 7)
-        layout.addLayout(report_row)
+        self.year = QSpinBox()
+        self.year.setRange(2020, 2100)
+        self.year.setValue(date.today().year)
+        monthly_button = AnimatedButton("Ver cierre mensual")
+        monthly_button.setProperty("class", "primary")
+        monthly_button.clicked.connect(self.show_monthly)
+        for widget in (QLabel("Cajero"), self.cashier_filter, QLabel("Día"), self.day, daily_button,
+                       QLabel("Mes"), self.month, QLabel("Año"), self.year, monthly_button):
+            reports_layout.addWidget(widget)
+        reports_layout.addStretch()
+        layout.addWidget(reports_box)
 
+        # -------------------------------------------------- cajas
+        layout.addWidget(QLabel("Historial de cajas (doble clic o «Ver reporte» para el detalle de cobros)"))
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels(["Cajero", "Correo", "Caja", "Fondo", "Esperado", "Físico", "Diferencia", "Estado", "Auditoría"])
+        self.table.setColumnCount(10)
+        self.table.setHorizontalHeaderLabels(
+            ["Caja", "Cajero", "Apertura", "Cierre", "Fondo", "Esperado", "Contado", "Diferencia", "Justificación", ""]
+        )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.doubleClicked.connect(lambda index: self.show_register(self._registers[index.row()]["id"]))
         layout.addWidget(self.table)
         self.status = QLabel("")
         self.status.setObjectName("PageSubtitle")
         layout.addWidget(self.status)
+        self._registers: list[dict] = []
         self.reload()
-        self.load_monthly_report()
+
+    # -------------------------------------------------- cajeros
 
     def create_cashier(self):
         fields = [
             Field("full_name", "Nombre completo", regex=r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' \-]*$",
                   max_length=150, placeholder="Nombre y apellido", required=True),
             Field("email", "Correo", regex=r"^\S*$", max_length=120, required=True),
-            Field("password", "Contraseña", regex=r"^\S*$", max_length=128,
+            Field("password", "Contraseña temporal", regex=r"^\S*$", max_length=128,
                   placeholder="Mínimo 6, con letras y números", required=True),
             # Un cajero es un empleado mayor de edad: el calendario no permite
             # elegir hoy, una fecha futura ni menos de 18 años.
@@ -129,7 +126,10 @@ class CashiersPage(QWidget):
         dialog.inputs["password"].setEchoMode(QLineEdit.Password)
         if dialog.exec() != QDialog.Accepted:
             return
-        QMessageBox.information(self, "Cajero creado", "El cajero ya puede iniciar sesión con su correo.")
+        QMessageBox.information(
+            self, "Cajero creado",
+            "El cajero ya puede iniciar sesión. Al entrar por primera vez el sistema le pedirá cambiar la contraseña.",
+        )
         self.reload()
 
     def reload_cashiers(self):
@@ -138,12 +138,24 @@ class CashiersPage(QWidget):
         except ApiError as exc:
             self.status.setText(str(exc))
             return
+        selected = self.cashier_filter.currentData()
+        self.cashier_filter.blockSignals(True)
+        self.cashier_filter.clear()
+        self.cashier_filter.addItem("Todos los cajeros", None)
+        for cashier in cashiers:
+            self.cashier_filter.addItem(cashier["full_name"], cashier["id"])
+        if selected is not None and self.cashier_filter.findData(selected) >= 0:
+            self.cashier_filter.setCurrentIndex(self.cashier_filter.findData(selected))
+        self.cashier_filter.blockSignals(False)
+
         self.cashiers_table.setRowCount(len(cashiers))
         self.cashiers_table.verticalHeader().setDefaultSectionSize(40)
         for index, cashier in enumerate(cashiers):
             active = cashier["is_active"]
-            values = [cashier["full_name"], cashier["email"], "Activo" if active else "Desactivado"]
-            for column, value in enumerate(values):
+            state = "Activo" if active else "Desactivado"
+            if active and cashier.get("must_change_password"):
+                state += " · contraseña temporal"
+            for column, value in enumerate([cashier["full_name"], cashier["email"], state]):
                 self.cashiers_table.setItem(index, column, QTableWidgetItem(value))
             cell = QWidget()
             cell_layout = QHBoxLayout(cell)
@@ -175,7 +187,7 @@ class CashiersPage(QWidget):
         self.reload_cashiers()
 
     def reset_password(self, cashier):
-        field = Field("new_password", "Nueva contraseña", regex=r"^\S*$", max_length=128,
+        field = Field("new_password", "Contraseña temporal", regex=r"^\S*$", max_length=128,
                       placeholder="Mínimo 6, con letras y números", required=True)
         dialog = RecordDialog(
             f"Restablecer contraseña de {cashier['full_name']}", [field], self,
@@ -183,7 +195,13 @@ class CashiersPage(QWidget):
         )
         dialog.inputs["new_password"].setEchoMode(QLineEdit.Password)
         if dialog.exec() == QDialog.Accepted:
-            QMessageBox.information(self, "Contraseña restablecida", "Comunica la nueva contraseña al cajero.")
+            QMessageBox.information(
+                self, "Contraseña restablecida",
+                "Comunica la contraseña temporal al cajero: el sistema le pedirá cambiarla al entrar.",
+            )
+            self.reload_cashiers()
+
+    # -------------------------------------------------- cajas y cierres
 
     def reload(self):
         self.reload_cashiers()
@@ -196,56 +214,43 @@ class CashiersPage(QWidget):
         self.table.setRowCount(len(rows))
         self.status.setText("Sin cajas registradas todavía." if not rows else "")
         for row_index, row in enumerate(rows):
-            values = [row["cashier_name"], row["cashier_email"], f"#{row['id']}", f"${float(row['initial_amount']):,.2f}", f"${float(row['expected_amount']):,.2f}", f"${float(row['physical_amount']):,.2f}", f"${float(row['difference']):,.2f}", "Abierta" if row["is_open"] else "Cerrada", row.get("audit_explanation") or "Sin observaciones"]
+            closed = not row["is_open"]
+            values = [
+                f"#{row['id']}", row["cashier_name"], row["opened_at"] or "",
+                row["closed_at"] if closed else "ABIERTA",
+                money(row["initial_amount"]),
+                money(row["expected_amount"]) if closed else "—",
+                money(row["physical_amount"]) if closed else "—",
+                money(row["difference"]) if closed else "—",
+                row.get("audit_explanation") or ("Caja cuadrada" if closed and float(row["difference"]) == 0 else ""),
+            ]
             for column, value in enumerate(values):
                 self.table.setItem(row_index, column, QTableWidgetItem(value))
+            button = QPushButton("Ver reporte")
+            button.setStyleSheet("padding: 3px 10px;")
+            button.clicked.connect(lambda _c=False, register_id=row["id"]: self.show_register(register_id))
+            self.table.setCellWidget(row_index, 9, button)
 
-    def export_closure(self):
-        report = getattr(self, "_monthly", None)
-        if report is None:
-            QMessageBox.warning(self, "Sin datos", "Primero actualiza el cierre mensual.")
-            return
-        cashier_id = self.cashier_filter.currentData()
-        month_key = report["periodo"]
-        registers = [
-            r for r in getattr(self, "_registers", [])
-            if (r.get("closed_at") or r.get("opened_at") or "").startswith(month_key)
-            and (cashier_id is None or r["cashier_id"] == cashier_id)
-        ]
-        export_report(self, Report(
-            title=f"Cierre de caja {month_key}",
-            subtitle=f"Cajero: {self.cashier_filter.currentText()}",
-            summary=[
-                ("Cajas cerradas", int(report["cajas_cerradas"])),
-                ("Cobrado en pagos", float(report["total_cobrado_mes"])),
-                ("Esperado en cajas", float(report["total_esperado_cajas"])),
-                ("Efectivo contado", float(report["total_efectivo_contado"])),
-                ("Descuadres", float(report["total_descuadres_mes"])),
-            ],
-            sections=[Section(
-                "Cajas del mes",
-                ["Caja", "Cajero", "Apertura", "Cierre", "Fondo", "Esperado", "Físico", "Diferencia", "Estado", "Auditoría"],
-                [
-                    [r["id"], r["cashier_name"], str(r["opened_at"])[:16].replace("T", " "),
-                     str(r.get("closed_at") or "")[:16].replace("T", " "), float(r["initial_amount"]),
-                     float(r["expected_amount"]), float(r["physical_amount"]), float(r["difference"]),
-                     "Abierta" if r["is_open"] else "Cerrada", r.get("audit_explanation") or ""]
-                    for r in registers
-                ],
-                money={4, 5, 6, 7},
-            )],
-        ), f"Cierre de caja {month_key}")
-
-    def load_monthly_report(self):
+    def show_register(self, register_id: int):
         try:
-            cashier_id = self.cashier_filter.currentData()
-            suffix = f"&cashier_id={cashier_id}" if cashier_id else ""
-            report = api.get(f"/cashier/monthly?year={int(self.year.text())}&month={self.month.currentData()}{suffix}")
-        except (ApiError, ValueError) as exc:
-            self.status.setText(f"No se pudo cargar el cierre mensual: {exc}")
-            return
-        self._monthly = report
-        self.summary_labels["cajas_cerradas"].setText(str(report["cajas_cerradas"]))
-        self.summary_labels["total_cobrado_mes"].setText(f"${float(report['total_cobrado_mes']):,.2f}")
-        self.summary_labels["total_efectivo_contado"].setText(f"${float(report['total_efectivo_contado']):,.2f}")
-        self.summary_labels["total_descuadres_mes"].setText(f"${float(report['total_descuadres_mes']):,.2f}")
+            cash_reports.open_register_report(self, register_id)
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo cargar la caja", str(exc))
+
+    def show_daily(self):
+        try:
+            cash_reports.open_daily_report(
+                self, self.day.date().toString("yyyy-MM-dd"),
+                self.cashier_filter.currentData(), self.cashier_filter.currentText(),
+            )
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo cargar el cierre del día", str(exc))
+
+    def show_monthly(self):
+        try:
+            cash_reports.open_monthly_report(
+                self, self.year.value(), self.month.currentData(),
+                self.cashier_filter.currentData(), self.cashier_filter.currentText(),
+            )
+        except ApiError as exc:
+            QMessageBox.critical(self, "No se pudo cargar el cierre mensual", str(exc))

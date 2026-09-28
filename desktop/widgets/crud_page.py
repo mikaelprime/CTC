@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from PySide6.QtCore import QDate, QRegularExpression, QTime, Qt, QTimer
@@ -100,10 +100,7 @@ class RecordDialog(QDialog):
         self.form.insertRow(self.form.rowCount() - 1, label, widget)
 
     def _on_accept(self) -> None:
-        missing = [
-            f.label for f in self.fields
-            if f.required and f.kind == "text" and not self.inputs[f.name].text().strip()
-        ]
+        missing = missing_required(self.fields, self.inputs)
         if missing:
             QMessageBox.warning(self, "Faltan datos", "Completa: " + ", ".join(missing))
             return
@@ -119,94 +116,106 @@ class RecordDialog(QDialog):
 
     @staticmethod
     def _apply_value(widget: QWidget, f: Field, value: Any) -> None:
-        # Precarga el diálogo con los datos actuales del registro al editar,
-        # en vez de mostrarlo siempre en blanco como en modo "crear".
-        if f.kind == "int":
-            widget.setValue(int(value))
-        elif f.kind == "float":
-            widget.setValue(float(value))
-        elif f.kind == "date":
-            widget.setDate(QDate.fromString(str(value)[:10], "yyyy-MM-dd"))
-        elif f.kind == "time":
-            widget.setTime(QTime.fromString(str(value)[:8], "HH:mm:ss"))
-        elif f.kind in ("combo", "bool"):
-            index = widget.findData(value)
-            if index >= 0:
-                widget.setCurrentIndex(index)
-        else:
-            widget.setText(str(value))
+        apply_field_value(widget, f, value)
 
     def _build_widget(self, f: Field) -> QWidget:
-        if f.kind == "int":
-            w = QSpinBox()
-            w.setRange(int(f.minimum), int(f.maximum))
-            w.setValue(int(f.default) if f.default is not None else 0)
-            return w
-        if f.kind == "float":
-            w = QDoubleSpinBox()
-            w.setRange(f.minimum, f.maximum)
-            w.setDecimals(2)
-            w.setValue(float(f.default) if f.default is not None else 0.0)
-            return w
-        if f.kind == "date":
-            w = QDateEdit()
-            w.setCalendarPopup(True)
-            w.setDisplayFormat("dd/MM/yyyy")
-            today = QDate.currentDate()
-            if f.min_days is not None:
-                w.setMinimumDate(today.addDays(f.min_days))
-            if f.max_days is not None:
-                w.setMaximumDate(today.addDays(f.max_days))
-            w.setDate(today.addDays(f.default_days))
-            return w
-        if f.kind == "time":
-            w = QTimeEdit()
-            w.setTime(QTime(8, 0))
-            return w
-        if f.kind == "combo":
-            w = QComboBox()
-            for label, value in (f.options() if f.options else []):
-                w.addItem(label, value)
-            return w
-        if f.kind == "bool":
-            w = QComboBox()
-            w.addItem("Sí", True)
-            w.addItem("No", False)
-            return w
-        w = QLineEdit()
-        if f.input_mask:
-            w.setInputMask(f.input_mask)
-        if f.regex:
-            w.setValidator(QRegularExpressionValidator(QRegularExpression(f.regex), w))
-        if f.max_length:
-            w.setMaxLength(f.max_length)
-        if f.placeholder:
-            w.setPlaceholderText(f.placeholder)
-        if f.default is not None:
-            w.setText(str(f.default))
-        return w
+        return build_field_widget(f)
 
     def values(self) -> dict:
-        result: dict[str, Any] = {}
-        for f in self.fields:
-            w = self.inputs[f.name]
-            if f.kind == "int":
-                result[f.name] = w.value()
-            elif f.kind == "float":
-                result[f.name] = w.value()
-            elif f.kind == "date":
-                result[f.name] = w.date().toString("yyyy-MM-dd")
-            elif f.kind == "time":
-                result[f.name] = w.time().toString("HH:mm:ss")
-            elif f.kind in ("combo", "bool"):
-                result[f.name] = w.currentData()
-            else:
-                text = w.text().strip()
-                # Con máscara (DUI) un campo vacío devuelve solo el guion.
-                if f.input_mask and not any(ch.isalnum() for ch in text):
-                    text = ""
-                result[f.name] = text
-        return result
+        return {f.name: read_field_value(f, self.inputs[f.name]) for f in self.fields}
+
+
+def missing_required(fields: list[Field], inputs: dict[str, QWidget]) -> list[str]:
+    """Etiquetas de los campos de texto obligatorios que quedaron vacíos."""
+    return [
+        f.label for f in fields
+        if f.required and f.kind == "text" and not inputs[f.name].text().strip()
+    ]
+
+
+def apply_field_value(widget: QWidget, f: Field, value: Any) -> None:
+    """Precarga un campo con el dato actual del registro (al editar)."""
+    if f.kind == "int":
+        widget.setValue(int(value))
+    elif f.kind == "float":
+        widget.setValue(float(value))
+    elif f.kind == "date":
+        widget.setDate(QDate.fromString(str(value)[:10], "yyyy-MM-dd"))
+    elif f.kind == "time":
+        widget.setTime(QTime.fromString(str(value)[:8], "HH:mm:ss"))
+    elif f.kind in ("combo", "bool"):
+        index = widget.findData(value)
+        if index >= 0:
+            widget.setCurrentIndex(index)
+    else:
+        widget.setText(str(value))
+
+
+def build_field_widget(f: Field) -> QWidget:
+    if f.kind == "int":
+        w = QSpinBox()
+        w.setRange(int(f.minimum), int(f.maximum))
+        w.setValue(int(f.default) if f.default is not None else 0)
+        return w
+    if f.kind == "float":
+        w = QDoubleSpinBox()
+        w.setRange(f.minimum, f.maximum)
+        w.setDecimals(2)
+        w.setValue(float(f.default) if f.default is not None else 0.0)
+        return w
+    if f.kind == "date":
+        w = QDateEdit()
+        w.setCalendarPopup(True)
+        w.setDisplayFormat("dd/MM/yyyy")
+        today = QDate.currentDate()
+        if f.min_days is not None:
+            w.setMinimumDate(today.addDays(f.min_days))
+        if f.max_days is not None:
+            w.setMaximumDate(today.addDays(f.max_days))
+        w.setDate(today.addDays(f.default_days))
+        return w
+    if f.kind == "time":
+        w = QTimeEdit()
+        w.setTime(QTime(8, 0))
+        return w
+    if f.kind == "combo":
+        w = QComboBox()
+        for label, value in (f.options() if f.options else []):
+            w.addItem(label, value)
+        return w
+    if f.kind == "bool":
+        w = QComboBox()
+        w.addItem("Sí", True)
+        w.addItem("No", False)
+        return w
+    w = QLineEdit()
+    if f.input_mask:
+        w.setInputMask(f.input_mask)
+    if f.regex:
+        w.setValidator(QRegularExpressionValidator(QRegularExpression(f.regex), w))
+    if f.max_length:
+        w.setMaxLength(f.max_length)
+    if f.placeholder:
+        w.setPlaceholderText(f.placeholder)
+    if f.default is not None:
+        w.setText(str(f.default))
+    return w
+
+
+def read_field_value(f: Field, w: QWidget) -> Any:
+    if f.kind in ("int", "float"):
+        return w.value()
+    if f.kind == "date":
+        return w.date().toString("yyyy-MM-dd")
+    if f.kind == "time":
+        return w.time().toString("HH:mm:ss")
+    if f.kind in ("combo", "bool"):
+        return w.currentData()
+    text = w.text().strip()
+    # Con máscara (DUI) un campo vacío devuelve solo el guion.
+    if f.input_mask and not any(ch.isalnum() for ch in text):
+        text = ""
+    return text
 
 
 class CrudPage(QWidget):
@@ -226,6 +235,7 @@ class CrudPage(QWidget):
         update_fn: Optional[Callable[[dict, dict], Any]] = None,
         empty_message: str = "No hay registros todavía.",
         extra_actions: Optional[list[tuple[str, Callable[[dict], Any], Callable[[dict], bool]]]] = None,
+        custom_create: bool = False,
         parent=None,
     ):
         super().__init__(parent)
@@ -268,7 +278,8 @@ class CrudPage(QWidget):
         refresh_btn.clicked.connect(self.reload)
         toolbar.addWidget(refresh_btn)
         toolbar.addStretch()
-        if create_spec and create_fn:
+        # custom_create: la página tiene su propio formulario (on_create).
+        if (create_spec and create_fn) or custom_create:
             add_btn = AnimatedButton(f"➕ {create_label}")
             add_btn.setProperty("class", "primary")
             add_btn.clicked.connect(self.on_create)
