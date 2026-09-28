@@ -1,78 +1,32 @@
+from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+
 from app.models.student import Student
-from app.schemas.student_schema import StudentCreate, StudentUpdate
-from app.repositories import student_repository
+from app.schemas.student_schema import check_student_consistency
+from app.services import audit_service
 
-def get_students(db: Session):
-    return student_repository.get_all(db)
 
-def get_student(db: Session, student_id: int):
-    student = student_repository.get_by_id(db, student_id)
-
-    if not student:
+def build_student(db: Session, data: dict, user) -> Student:
+    """Valida y agrega (sin commit) un estudiante nuevo. Lo usan el registro
+    de estudiantes y el formulario único de matrícula, que lo guarda en la
+    misma transacción que la inscripción."""
+    try:
+        data = check_student_consistency(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    duplicate = db.query(Student.id).filter(
+        func.lower(Student.full_name) == data["full_name"].lower(),
+        Student.birth_date == data["birth_date"],
+    ).first()
+    if duplicate:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Estudiante no encontrado"
+            status_code=409,
+            detail=f"Ya existe un estudiante con ese nombre y fecha de nacimiento (#{duplicate.id}). "
+                   "Selecciónalo en lugar de registrarlo de nuevo.",
         )
-    db.refresh(student)
-
-    print("========== STUDENT ==========")
-    print(student)
-    print(student.__dict__)
-    print("is_active:", student.is_active)
-    print("=============================")
-
+    student = Student(**data)
+    db.add(student)
+    db.flush()
+    audit_service.record(db, user, "REGISTRO_ESTUDIANTE", "student", student.id, student.full_name)
     return student
-
-def create_student(db: Session, student_data: StudentCreate):
-    existing_student = student_repository.get_by_email(
-        db,
-        student_data.email
-    )
-
-    if existing_student:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ya existe un estudiante con ese correo"
-        )
-
-    student = Student(**student_data.model_dump())
-
-    return student_repository.create(db, student)
-
-def update_student(
-    db: Session,
-    student_id: int,
-    student_data: StudentUpdate
-):
-
-    student = student_repository.get_by_id(db, student_id)
-
-    if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Estudiante no encontrado"
-        )
-
-    update_data = student_data.model_dump(exclude_unset=True)
-
-    for key, value in update_data.items():
-        setattr(student, key, value)
-
-    return student_repository.update(db, student)
-
-def delete_student(db: Session, student_id: int):
-    student = student_repository.get_by_id(db, student_id)
-
-    if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Estudiante no encontrado"
-        )
-
-    student_repository.delete(db, student)
-
-    return {
-        "message": "Estudiante eliminado correctamente"
-    }

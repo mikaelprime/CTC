@@ -33,14 +33,37 @@ def get_schedules() -> list[dict]:
     return api.get("/schedules/") or []
 
 
-def kpis_generales() -> dict:
-    students = get_students()
-    payments = get_payments()
-    enrollments = get_enrollments()
+def get_upcoming_payments(days: int = 7) -> list[dict]:
+    return api.get(f"/reports/upcoming-payments?days={days}") or []
+
+
+def load_dashboard_data() -> dict:
+    """Trae todo lo que necesita el panel en una sola ronda de peticiones.
+
+    Antes cada función de abajo (kpis, ingresos, distribución, actividad)
+    volvía a pedir /payments/ y /enrollments/ por su cuenta: un reload del
+    panel disparaba la misma petición 3 veces. Ahora se trae una vez y se
+    reparte, además de correr en un hilo aparte para no congelar la ventana.
+    """
+    return {
+        "students": get_students(),
+        "payments": get_payments(),
+        "enrollments": get_enrollments(),
+        "upcoming": get_upcoming_payments(),
+    }
+
+
+def kpis_generales(data: dict) -> dict:
+    students = data["students"]
+    payments = data["payments"]
+    enrollments = data["enrollments"]
 
     today = date.today()
 
-    estudiantes_activos = sum(1 for s in students if s.get("is_active"))
+    # El modelo de estudiante no tiene un campo is_active (no hay baja lógica,
+    # solo eliminación), así que todo estudiante devuelto por la API cuenta
+    # como activo.
+    estudiantes_activos = len(students)
 
     inscripciones_mes = sum(
         1
@@ -53,6 +76,13 @@ def kpis_generales() -> dict:
     pagos_pendientes = sum(float(p["total"]) for p in pendientes)
     vencidos = [p for p in pendientes if _parse_date(p["due_date"]) < today]
 
+    # El cobro normal nunca deja cuotas PENDIENTE en /payments/: la deuda
+    # real (matrículas atrasadas y las que vencen pronto) viene del reporte
+    # de cobros próximos, calculado por el backend a partir del ciclo.
+    upcoming = data.get("upcoming", [])
+    atrasadas = [u for u in upcoming if u.get("is_overdue")]
+    pagos_pendientes += sum(float(u["amount"]) for u in atrasadas)
+
     matriculas_criticas = sum(
         1
         for e in enrollments
@@ -64,19 +94,19 @@ def kpis_generales() -> dict:
         "estudiantes_activos": estudiantes_activos,
         "inscripciones_mes": inscripciones_mes,
         "pagos_pendientes": round(pagos_pendientes, 2),
-        "cuotas_por_auditar": len(pendientes),
-        "vencimientos": len(vencidos),
+        "cuotas_por_auditar": len(pendientes) + len(atrasadas),
+        "vencimientos": len(vencidos) + len(upcoming),
         "matriculas_criticas": matriculas_criticas,
     }
 
 
-def ingresos_mensuales() -> dict:
-    payments = get_payments()
+def ingresos_mensuales(data: dict, count: int = 6) -> dict:
+    payments = data["payments"]
 
     today = date.today()
     months: list[tuple[int, int]] = []
     y, m = today.year, today.month
-    for _ in range(6):
+    for _ in range(count):
         months.append((y, m))
         m -= 1
         if m == 0:
@@ -88,6 +118,8 @@ def ingresos_mensuales() -> dict:
     proyectado = dict.fromkeys(months, 0.0)
 
     for p in payments:
+        if p["status"] == "ANULADO":
+            continue
         due_key = (_parse_date(p["due_date"]).year, _parse_date(p["due_date"]).month)
         if due_key in proyectado:
             proyectado[due_key] += float(p["total"])
@@ -104,8 +136,8 @@ def ingresos_mensuales() -> dict:
     }
 
 
-def distribucion_academica() -> dict:
-    enrollments = get_enrollments()
+def distribucion_academica(data: dict) -> dict:
+    enrollments = data["enrollments"]
 
     counts: dict[str, int] = {}
     for e in enrollments:
@@ -115,9 +147,9 @@ def distribucion_academica() -> dict:
     return {"programas": list(counts.keys()), "estudiantes": list(counts.values())}
 
 
-def actividad_reciente(limit: int = 8) -> list[dict]:
-    payments = get_payments()
-    enrollments_by_id = {e["id"]: e for e in get_enrollments()}
+def actividad_reciente(data: dict, limit: int = 8) -> list[dict]:
+    payments = data["payments"]
+    enrollments_by_id = {e["id"]: e for e in data["enrollments"]}
 
     today = date.today()
     recientes = sorted(payments, key=lambda p: p["payment_date"], reverse=True)[:limit]
@@ -127,6 +159,8 @@ def actividad_reciente(limit: int = 8) -> list[dict]:
         enrollment = enrollments_by_id.get(p["enrollment_id"])
         if p["status"] == "PAGADO":
             estado, kind = "Pagado", "success"
+        elif p["status"] == "ANULADO":
+            estado, kind = "Anulado", "error"
         elif _parse_date(p["due_date"]) < today:
             estado, kind = "Vencido", "error"
         else:
@@ -136,7 +170,7 @@ def actividad_reciente(limit: int = 8) -> list[dict]:
             {
                 "tipo": p["payment_type"] or "Pago de Cuota",
                 "estudiante": enrollment["student"]["full_name"] if enrollment else "—",
-                "id": f"PAG-{p['id']:04d}",
+                "id": f"R-{p['receipt_id']:06d}" if p.get("receipt_id") else f"PAG-{p['id']:04d}",
                 "programa": enrollment["diploma"]["name"] if enrollment else "—",
                 "monto": float(p["total"]),
                 "fecha": p["payment_date"],

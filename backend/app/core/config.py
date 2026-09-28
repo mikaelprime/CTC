@@ -10,12 +10,15 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = ""
-    SMTP_FROM_NAME: str = "CTC"
+    # Envío de correo vía la API HTTP de Mailjet (no SMTP): Render bloquea las
+    # conexiones SMTP salientes en su plan gratuito, así que un socket a
+    # smtp.gmail.com falla con "Network is unreachable" sin importar las
+    # credenciales. La API HTTP de Mailjet corre sobre HTTPS/443, que ningún
+    # host bloquea. Ver https://app.mailjet.com/account/apikeys.
+    MAILJET_API_KEY: str = ""
+    MAILJET_API_SECRET: str = ""
+    EMAIL_FROM_ADDRESS: str = ""
+    EMAIL_FROM_NAME: str = "CTC El Salvador"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

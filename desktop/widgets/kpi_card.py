@@ -1,12 +1,14 @@
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from theme import STATUS_COLORS
+from widgets.effects import apply_card_shadow
 
 
 class KpiCard(QFrame):
     def __init__(self, label: str, value: str, sub: str = "", sub_kind: str = "info", parent=None):
         super().__init__(parent)
         self.setObjectName("KpiCard")
+        apply_card_shadow(self, blur=14, y_offset=5, alpha=60)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(6)

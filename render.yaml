@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: ctc-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "480"
+      - key: MAILJET_API_KEY
+        sync: false
+      - key: MAILJET_API_SECRET
+        sync: false
+      - key: EMAIL_FROM_ADDRESS
+        sync: false
+      - key: EMAIL_FROM_NAME
+        value: CTC El Salvador
+      # Clave para POST /api/cron/reminders (cron externo diario).
+      - key: CRON_SECRET
+        generateValue: true

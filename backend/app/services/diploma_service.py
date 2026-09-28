@@ -1,5 +1,7 @@
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.diploma import Diploma
+from app.models.enrollment import Enrollment
 from app.schemas.diploma_schema import DiplomaCreate, DiplomaUpdate
 
 def get_all(db: Session):
@@ -38,6 +40,13 @@ def delete(db: Session, diploma_id: int):
 
     if not db_diploma:
         return None
+
+    has_enrollments = db.query(Enrollment).filter(Enrollment.diploma_id == diploma_id).first()
+    if has_enrollments:
+        raise HTTPException(
+            status_code=409,
+            detail="No se puede eliminar: hay estudiantes inscritos en este programa. Elimina esas inscripciones primero.",
+        )
 
     db.delete(db_diploma)
     db.commit()

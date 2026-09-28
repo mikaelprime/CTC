@@ -1,25 +1,39 @@
 from api_client import api
 from widgets.crud_page import Column, CrudPage, Field
 
+# Los diplomados no tienen precios propios: la matrícula y la colegiatura
+# salen del tarifario institucional (Configuración), igual para todos.
+
 
 def _fetch():
     return api.get("/diplomas/")
 
 
-def _create(payload: dict):
-    body = {
+def _body(payload: dict) -> dict:
+    return {
         "name": payload["name"],
         "description": payload["description"] or None,
         "duration_months": payload["duration_months"],
-        "registration_fee": payload["registration_fee"],
-        "monthly_fee": payload["monthly_fee"],
         "active": payload["active"],
     }
-    return api.post("/diplomas/", json=body)
+
+
+def _create(payload: dict):
+    return api.post("/diplomas/", json=_body(payload))
+
+
+def _update(row: dict, payload: dict):
+    return api.put(f"/diplomas/{row['id']}", json=_body(payload))
 
 
 def _delete(row: dict):
     return api.delete(f"/diplomas/{row['id']}")
+
+
+def _installments(row: dict) -> str:
+    """Cuotas de colegiatura (una cada 28 días mientras dure el programa)."""
+    days = round(row["duration_months"] * 365.25 / 12)
+    return str(max(1, -(-days // 28)))
 
 
 class DiplomasPage(CrudPage):
@@ -27,28 +41,28 @@ class DiplomasPage(CrudPage):
         columns = [
             Column("id", "ID"),
             Column("name", "Programa"),
+            Column("description", "Descripción", formatter=lambda r: r.get("description") or "—"),
             Column("duration_months", "Duración (meses)"),
-            Column("registration_fee", "Matrícula", formatter=lambda r: f"${r['registration_fee']:,}"),
-            Column("monthly_fee", "Mensualidad", formatter=lambda r: f"${r['monthly_fee']:,}"),
+            Column("installments", "Cuotas aprox.", formatter=_installments),
             Column("active", "Estado", formatter=lambda r: "Activo" if r.get("active") else "Inactivo"),
         ]
-        create_spec = [
-            Field("name", "Nombre del programa"),
+        spec = [
+            Field("name", "Nombre del programa", required=True),
             Field("description", "Descripción"),
-            Field("duration_months", "Duración (meses)", kind="int", default=6, minimum=1, maximum=60),
-            Field("registration_fee", "Cuota de matrícula (USD)", kind="int", default=50, maximum=100_000),
-            Field("monthly_fee", "Cuota mensual (USD)", kind="int", default=40, maximum=100_000),
-            Field("active", "Activo", kind="bool", default=True),
+            Field("duration_months", "Duración (meses)", kind="int", default=6, minimum=1, maximum=36),
+            Field("active", "Activo (recibe inscripciones)", kind="bool", default=True),
         ]
         super().__init__(
-            title="Diplomas y Programas Académicos",
-            subtitle="Catálogo de programas, duración y aranceles",
+            title="Diplomados",
+            subtitle="Catálogo de programas y su duración · los precios están en Configuración (tarifario)",
             columns=columns,
             fetch_fn=_fetch,
-            create_spec=create_spec,
+            create_spec=spec,
             create_fn=_create,
             create_label="Nuevo programa",
             delete_fn=_delete,
+            edit_spec=spec,
+            update_fn=_update,
             empty_message="No hay programas registrados todavía.",
             parent=parent,
         )

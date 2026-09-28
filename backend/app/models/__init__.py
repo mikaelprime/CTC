@@ -5,3 +5,7 @@ from app.models.diploma import Diploma
 from app.models.schedule import Schedule
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment
+from app.models.receipt import Receipt
+from app.models.cash_register import CashRegister
+from app.models.institution_config import InstitutionConfig
+from app.models.audit_log import AuditLog

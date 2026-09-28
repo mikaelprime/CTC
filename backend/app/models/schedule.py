@@ -15,8 +15,11 @@ class Schedule(Base):
 
     active = Column(Boolean, default=True)
 
+    # Sin cascade delete a propósito: borrar un turno no debe arrastrar en
+    # silencio las inscripciones (y pagos) de los estudiantes que lo cursan.
+    # El service verifica esto explícitamente antes de borrar (mismo criterio
+    # que Diploma).
     enrollments = relationship(
         "Enrollment",
         back_populates="schedule",
-        cascade="all, delete-orphan"
     )

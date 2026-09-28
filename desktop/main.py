@@ -1,35 +1,149 @@
+import logging
+import os
 import sys
+import traceback
+from pathlib import Path
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication, QMessageBox
 
-from theme import STYLESHEET
+from api_client import api
+from theme_manager import ThemeManager
+from widgets import transitions
+from widgets.async_worker import wait_for_workers
+from windows.change_password import change_password_dialog
 from windows.login_window import LoginWindow
 from windows.main_window import MainWindow
+from windows.splash_screen import SplashScreen
+
+logger = logging.getLogger("ctc_campus")
+
+
+def _asset_path(*parts: str) -> Path:
+    """Resuelve una ruta de assets tanto corriendo desde el código fuente
+    como empaquetado con PyInstaller (que descomprime los `datas` en una
+    carpeta temporal apuntada por sys._MEIPASS)."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base.joinpath(*parts)
+
+
+def _setup_logging() -> None:
+    """Registra los eventos también en un archivo, no solo en consola.
+
+    El .exe distribuido corre sin consola (console=False en el spec de
+    PyInstaller), así que si algo falla ahí afuera, un archivo de log es la
+    única forma de que la persona que lo usa pueda mandarnos qué pasó.
+    """
+    handlers = [logging.StreamHandler()]
+    try:
+        log_dir = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CTC Campus" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_dir / "app.log", encoding="utf-8"))
+    except OSError:
+        pass  # sin permisos de escritura ahí: seguimos solo con consola
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=handlers,
+    )
+
+
+def _install_global_error_handler() -> None:
+    """Evita que un error inesperado cierre la app sin ninguna explicación.
+
+    Sin esto, cualquier excepción no capturada en un slot de Qt simplemente
+    termina el proceso (o lo deja en un estado roto) sin que quien usa el
+    programa entienda qué pasó. Con esto, se registra el error y se muestra
+    un aviso comprensible; la persona puede seguir usando el resto de la app.
+    """
+
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logger.error("Error no controlado:\n%s", "".join(
+            traceback.format_exception(exc_type, exc_value, exc_traceback)
+        ))
+        try:
+            QMessageBox.critical(
+                None,
+                "Ocurrió un error inesperado",
+                "CTC Campus encontró un problema inesperado y pudo seguir funcionando.\n\n"
+                f"Detalle técnico: {exc_value}\n\n"
+                "Si el problema persiste, cierra y vuelve a abrir el programa.",
+            )
+        except Exception:
+            pass
+
+    sys.excepthook = handle_exception
 
 
 class App:
     def __init__(self):
         self.qapp = QApplication(sys.argv)
-        self.qapp.setStyleSheet(STYLESHEET)
+        icon_path = _asset_path("assets", "ctc_campus.ico")
+        if icon_path.exists():
+            self.qapp.setWindowIcon(QIcon(str(icon_path)))
+        self.theme_manager = ThemeManager(self.qapp)
         self.main_window = None
         self.login_window = None
-        self.show_login()
+        self.splash = SplashScreen(on_ready=self.show_login)
+        self.splash.show_on_current_screen()
+
+    @staticmethod
+    def _dispose(window) -> None:
+        if window is not None:
+            window.close()
+            window.deleteLater()
 
     def show_login(self) -> None:
+        # La carga (al abrir la app) se desvanece antes de mostrar el login;
+        # al cerrar sesión, la ventana principal ya se desvaneció sola.
+        if self.splash and self.splash.isVisible():
+            splash = self.splash
+            self.splash = None
+            transitions.fade_out_window(splash, lambda: (self._dispose(splash), self._open_login()))
+            return
+        self._open_login()
+
+    def _open_login(self) -> None:
+        self._dispose(self.splash)
+        self.splash = None
+        self._dispose(self.main_window)
         self.main_window = None
+        self._dispose(self.login_window)
         self.login_window = LoginWindow(on_success=self.show_main)
         self.login_window.show_on_current_screen()
 
     def show_main(self) -> None:
-        if self.login_window:
-            self.login_window.close()
-            self.login_window = None
-        self.main_window = MainWindow(on_logout=self.show_login)
-        self.main_window.show_on_current_screen()
+        # Contraseña temporal: hay que cambiarla antes de entrar (la API
+        # rechaza todo lo demás mientras tanto). Si cancela, sigue en el login.
+        if api.must_change_password and not change_password_dialog(self.login_window, required=True):
+            api.logout()
+            return
+        login = self.login_window
+        self.login_window = None
+        self.main_window = MainWindow(
+            on_logout=self.show_login,
+            on_exit=self.qapp.quit,
+            theme_manager=self.theme_manager,
+        )
+        if login is None or not login.isVisible():
+            transitions.fade_in_window(self.main_window, self.main_window.show_on_current_screen)
+            return
+        # Fundido cruzado: el panel aparece mientras el login se desvanece.
+        transitions.crossfade_windows(
+            login, self.main_window, self.main_window.show_on_current_screen,
+            lambda: self._dispose(login),
+        )
 
     def run(self) -> int:
-        return self.qapp.exec()
+        code = self.qapp.exec()
+        wait_for_workers()
+        return code
 
 
 if __name__ == "__main__":
+    _setup_logging()
+    _install_global_error_handler()
     sys.exit(App().run())

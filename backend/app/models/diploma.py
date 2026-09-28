@@ -14,9 +14,8 @@ class Diploma(Base):
 
     duration_months = Column(Integer, nullable=False)
 
-    registration_fee = Column(Integer, nullable=False)
-
-    monthly_fee = Column(Integer, nullable=False)
+    # Sin cuotas propias: la matrícula y la colegiatura salen del tarifario
+    # institucional (institution_config), igual para todos los diplomados.
 
     active = Column(Boolean, default=True)
 
@@ -31,8 +30,10 @@ class Diploma(Base):
         onupdate=func.now()
     )
 
+    # Sin cascade delete a propósito: borrar un diplomado no debe arrastrar
+    # en silencio las inscripciones (y pagos) de los estudiantes que lo
+    # cursan. El service verifica esto explícitamente antes de borrar.
     enrollments = relationship(
-    "Enrollment",
-    back_populates="diploma",
-    cascade="all, delete-orphan"
+        "Enrollment",
+        back_populates="diploma",
     )

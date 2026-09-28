@@ -8,7 +8,7 @@ from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-def get_current_user(
+def get_current_user_allow_temporary_password(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> User:
@@ -36,11 +36,24 @@ def get_current_user(
 
     return user
 
+
+def get_current_user(user: User = Depends(get_current_user_allow_temporary_password)) -> User:
+    """Usuario de la sesión. Con una contraseña temporal (creada o
+    restablecida por el administrador) solo puede cambiarla: la API rechaza
+    todo lo demás hasta que lo haga."""
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debes cambiar tu contraseña temporal antes de continuar",
+        )
+    return user
+
 def require_roles(*allowed_roles: str):
 
     def dependency(current_user: User = Depends(get_current_user)) -> User:
 
-        if current_user.role.name not in allowed_roles:
+        allowed = {role.upper() for role in allowed_roles}
+        if current_user.role.name.upper() not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permisos para realizar esta acción"
@@ -49,3 +62,10 @@ def require_roles(*allowed_roles: str):
         return current_user
 
     return dependency
+
+
+# Acciones que cambian catálogos, borran datos o tocan dinero ya cobrado:
+# antes solo se escondían en el menú del escritorio, pero la API las
+# aceptaba de cualquier usuario con sesión (p. ej. un cajero podía borrar
+# pagos llamando a DELETE /payments/{id}).
+require_admin = require_roles("ADMIN", "ADMINISTRADOR")

@@ -9,8 +9,12 @@ python-dotenv==1.2.2
 
 python-jose[cryptography]==3.5.0
 
+# passlib 1.7.4 lee bcrypt.__about__.__version__ para detectar la version del
+# backend; bcrypt>=4.1 elimino ese modulo y passlib lo reporta como
+# "(trapped) error reading bcrypt version" en cada arranque (no rompe el
+# login, solo ensucia el log). bcrypt 4.0.1 todavia expone __about__.
 passlib[bcrypt]==1.7.4
-bcrypt==4.1.3
+bcrypt==4.0.1
 
 python-multipart==0.0.32
 

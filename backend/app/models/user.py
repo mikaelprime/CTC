@@ -1,5 +1,6 @@
-from datetime import date, datetime
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String
+from datetime import date, datetime, timezone
+from typing import Optional
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
@@ -35,9 +36,31 @@ class User(Base):
         default=True
     )
 
+    # Contraseña temporal (creada o restablecida por el administrador, o la
+    # del seed): la API no deja usar nada más hasta que el usuario la cambie.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=sa_false(),
+        nullable=False,
+    )
+
+    # Bloqueo por intentos fallidos. Vive en la BD y no en memoria: el
+    # backend gratuito se reinicia seguido y el contador se perdía.
+    failed_login_attempts: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
+    )
+    locked_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow
+        default=lambda: datetime.now(timezone.utc)
     )
 
     role_id: Mapped[int] = mapped_column(

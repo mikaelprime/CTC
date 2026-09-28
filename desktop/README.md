@@ -23,7 +23,8 @@ python desktop/main.py
 ```
 
 Inicia sesión con un usuario existente (el seed crea `admin@ctc.edu.sv` / `123456`,
-ver `database/seed/seed.py`).
+contraseña temporal que el sistema pide cambiar al entrar;
+ver `backend/seed_data.py`).
 
 Por defecto la app apunta a `http://localhost:8000`. Para usar otra URL:
 
@@ -32,9 +33,22 @@ set API_BASE_URL=http://mi-servidor:8000
 python desktop/main.py
 ```
 
+## Crear la aplicación Windows
+
+Instala PyInstaller en el entorno virtual y ejecuta el script de compilación:
+
+```powershell
+& .venv\Scripts\python.exe -m pip install pyinstaller
+& .\desktop\build_exe.ps1
+```
+
+El resultado queda en `dist\CTC-Campus-release` y `dist\CTC-Campus.zip`. Antes de
+compartirlo, edita `config.json` junto al ejecutable y cambia `api_base_url` por la
+URL pública del backend. El ejecutable no contiene la base de datos ni credenciales
+SMTP.
+
 ## Módulos
 
-Todos los módulos con endpoints en el backend (Estudiantes, Inscripciones, Pagos,
-Horarios, Diplomas) leen y escriben datos reales. **Cajeros** y **Configuración**
-muestran un aviso porque el backend todavía no tiene esos endpoints — son vistas de
-referencia hasta que se agregue esa API.
+Todos los módulos leen y escriben datos reales: estudiantes, inscripciones, pagos,
+horarios, diplomas, cajeros y configuración. La interfaz también permite buscar
+registros, alternar tema claro/oscuro y usar pantalla completa.
