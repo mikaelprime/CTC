@@ -30,8 +30,9 @@ def new_schedule(headers):
 def test_student_history_lists_payments_and_totals():
     headers = auth_headers()
     enrollment = create_enrollment(headers, date.today())
-    paid = collect(headers, enrollment["id"], months=2)
-    client.post(f"/payments/{paid['payment_ids'][1]}/void", headers=headers, json={"reason": "Cobro duplicado"})
+    collect(headers, enrollment["id"])
+    duplicated = collect(headers, enrollment["id"])
+    client.post(f"/payments/{duplicated['payment_ids'][0]}/void", headers=headers, json={"reason": "Cobro duplicado"})
 
     response = client.get(f"/reports/student-history/{enrollment['student_id']}", headers=cashier_headers())
     assert response.status_code == 200
@@ -48,6 +49,12 @@ def test_student_history_lists_payments_and_totals():
     assert totals["voided"] == MONTHLY_FEE
     assert totals["tuition_installments_paid"] == 1
     assert data["enrollments"][0]["next_payment_date"] == (date.today() + timedelta(days=28)).isoformat()
+    # Estado de cuenta: 7 cuotas en 6 meses, 1 pagada, nada vencido.
+    account = data["enrollments"][0]
+    assert (account["installments_total"], account["installments_paid"]) == (7, 1)
+    assert account["amount_overdue"] == 0
+    assert totals["remaining_balance"] == 6 * MONTHLY_FEE
+    assert all(p["receipt_number"].startswith("R-") for p in data["payments"])
 
 
 def test_student_history_unknown_student_is_404():
@@ -94,7 +101,7 @@ def test_edit_rejects_invalid_values_and_cancelled_enrollments():
     headers = auth_headers()
     enrollment = create_enrollment(headers, date.today())
     url = f"/enrollments/{enrollment['id']}"
-    assert client.put(url, headers=headers, json={"tuition_plan": "VIP"}).status_code == 400
+    assert client.put(url, headers=headers, json={"tuition_plan": "VIP"}).status_code == 422
     assert client.put(url, headers=headers, json={"schedule_id": 999999}).status_code == 404
     assert client.put(url, headers=headers, json={
         "start_date": (date.today() + timedelta(days=400)).isoformat(),

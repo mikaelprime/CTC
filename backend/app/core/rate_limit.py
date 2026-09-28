@@ -1,9 +1,10 @@
-"""Freno simple contra intentos de login por fuerza bruta.
+"""Freno contra intentos de login por fuerza bruta (primera capa).
 
-No hay Redis ni infraestructura extra en este proyecto (un solo proceso de
-backend), así que un contador en memoria por correo es suficiente: tras
-varios intentos fallidos seguidos, bloquea ese correo un rato en vez de
-dejar reintentar sin límite.
+Contador en memoria por correo: tras varios intentos fallidos seguidos,
+bloquea ese correo un rato. Cubre también correos que no existen, para que
+la respuesta no revele cuáles son cuentas reales. La segunda capa es el
+bloqueo guardado en la cuenta (users.locked_until, ver routes/auth.py), que
+no se pierde cuando el backend se reinicia.
 """
 
 import time

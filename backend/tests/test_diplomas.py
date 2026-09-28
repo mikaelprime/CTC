@@ -17,8 +17,6 @@ def create_diploma(**overrides):
         "name": f"Diplomado Pytest {uuid4().hex[:8]}",
         "description": "Creado por pruebas automatizadas",
         "duration_months": 6,
-        "registration_fee": 25,
-        "monthly_fee": 40,
         "active": True,
     }
     payload.update(overrides)
@@ -37,7 +35,8 @@ def test_create_and_get_diploma():
     assert created.status_code == 200
     data = created.json()
     assert data["duration_months"] == 6
-    assert data["monthly_fee"] == 40
+    # Sin precios propios: el tarifario es institucional (Configuración).
+    assert "monthly_fee" not in data and "registration_fee" not in data
 
     response = client.get(f"/diplomas/{data['id']}", headers=auth_headers())
 
@@ -57,11 +56,11 @@ def test_update_diploma():
     response = client.put(
         f"/diplomas/{created['id']}",
         headers=auth_headers(),
-        json={"monthly_fee": 55},
+        json={"duration_months": 9},
     )
 
     assert response.status_code == 200
-    assert response.json()["monthly_fee"] == 55
+    assert response.json()["duration_months"] == 9
 
 
 def test_deleting_diploma_with_enrollments_is_rejected_not_a_500():
@@ -96,6 +95,7 @@ def test_deleting_diploma_with_enrollments_is_rejected_not_a_500():
             "diploma_id": diploma["id"],
             "schedule_id": schedule.json()["id"],
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
         },
     )
     assert enrollment.status_code == 200

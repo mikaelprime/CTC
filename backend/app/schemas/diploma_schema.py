@@ -24,11 +24,12 @@ class _DiplomaFields(BaseModel):
 
 
 class DiplomaBase(_DiplomaFields):
+    """Programa académico. No tiene precios propios: la matrícula y la
+    colegiatura salen del tarifario institucional (Configuración)."""
+
     name: str
     description: Optional[str] = None
     duration_months: int = Field(ge=1, le=36)
-    registration_fee: int = Field(ge=0, le=1000)
-    monthly_fee: int = Field(ge=0, le=1000)
     active: bool = True
 
 class DiplomaCreate(DiplomaBase):
@@ -38,8 +39,6 @@ class DiplomaUpdate(_DiplomaFields):
     name: Optional[str] = None
     description: Optional[str] = None
     duration_months: Optional[int] = Field(None, ge=1, le=36)
-    registration_fee: Optional[int] = Field(None, ge=0, le=1000)
-    monthly_fee: Optional[int] = Field(None, ge=0, le=1000)
     active: Optional[bool] = None
 
 class DiplomaResponse(DiplomaBase):

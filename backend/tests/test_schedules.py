@@ -95,8 +95,6 @@ def test_deleting_schedule_with_enrollments_is_rejected_not_a_500():
         json={
             "name": f"Diplomado Turno {uuid4().hex[:8]}",
             "duration_months": 6,
-            "registration_fee": 25,
-            "monthly_fee": 40,
         },
     )
     assert diploma.status_code == 200
@@ -111,6 +109,7 @@ def test_deleting_schedule_with_enrollments_is_rejected_not_a_500():
             "diploma_id": diploma.json()["id"],
             "schedule_id": schedule["id"],
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
         },
     )
     assert enrollment.status_code == 200

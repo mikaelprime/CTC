@@ -44,8 +44,6 @@ def create_diploma(headers, duration_months=4):
         json={
             "name": f"Diplomado Matricula {uuid4().hex[:8]}",
             "duration_months": duration_months,
-            "registration_fee": 25,
-            "monthly_fee": 40,
         },
     )
     assert response.status_code == 200
@@ -81,6 +79,7 @@ def test_create_enrollment_calculates_end_date():
             "diploma_id": diploma_id,
             "schedule_id": schedule_id,
             "enrollment_date": enrollment_date,
+            "start_date": enrollment_date,
         },
     )
 
@@ -111,6 +110,7 @@ def test_list_enrollments_does_not_run_a_query_per_row():
                 "diploma_id": diploma_id,
                 "schedule_id": schedule_id,
                 "enrollment_date": date.today().isoformat(),
+                "start_date": date.today().isoformat(),
             },
         )
         assert created.status_code == 200
@@ -161,6 +161,7 @@ def test_create_enrollment_charges_default_registration_fee():
             "diploma_id": diploma_id,
             "schedule_id": schedule_id,
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
         },
     )
     assert response.status_code == 200
@@ -188,6 +189,7 @@ def test_create_enrollment_promo_registration_charges_ten_dollars():
             "diploma_id": diploma_id,
             "schedule_id": schedule_id,
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
             "registration_type": "PROMO",
         },
     )
@@ -213,6 +215,7 @@ def test_create_enrollment_free_registration_creates_no_payment():
             "diploma_id": diploma_id,
             "schedule_id": schedule_id,
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
             "registration_type": "GRATIS",
         },
     )
@@ -236,10 +239,12 @@ def test_create_enrollment_rejects_invalid_registration_type():
             "diploma_id": diploma_id,
             "schedule_id": schedule_id,
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
             "registration_type": "NO_EXISTE",
         },
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
+    assert "Tipo de matrícula inválido" in response.json()["detail"]
 
 
 def test_create_enrollment_rejects_invalid_tuition_plan():
@@ -256,19 +261,20 @@ def test_create_enrollment_rejects_invalid_tuition_plan():
             "diploma_id": diploma_id,
             "schedule_id": schedule_id,
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
             "tuition_plan": "NO_EXISTE",
         },
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
+    assert "Plan de colegiatura inválido" in response.json()["detail"]
 
 
-def test_collect_payment_uses_tuition_plan_price_not_diploma_monthly_fee():
-    """El monto de la colegiatura sale de TUITION_PLANS[tuition_plan], no de
-    Diploma.monthly_fee (que puede ser cualquier cosa y ya no se usa para
-    calcular cobros)."""
+def test_collect_payment_uses_tuition_plan_price():
+    """El monto de la colegiatura sale del plan elegido en el tarifario
+    institucional (Plan Privado = $55.00), igual en cualquier diplomado."""
     headers = auth_headers()
     student_id = create_student(headers)
-    diploma_id = create_diploma(headers)  # monthly_fee=40, ahora irrelevante
+    diploma_id = create_diploma(headers)
     schedule_id = create_schedule(headers)
     today = date.today()
 
@@ -345,6 +351,7 @@ def test_create_enrollment_with_missing_diploma_returns_404():
             "diploma_id": 9999999999,
             "schedule_id": schedule_id,
             "enrollment_date": date.today().isoformat(),
+            "start_date": date.today().isoformat(),
         },
     )
 

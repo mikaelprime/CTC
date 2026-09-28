@@ -11,4 +11,5 @@ class CashierResponse(BaseModel):
     email: str
     birth_date: date
     is_active: bool
+    must_change_password: bool = False
     created_at: datetime

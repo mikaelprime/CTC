@@ -14,9 +14,8 @@ class Diploma(Base):
 
     duration_months = Column(Integer, nullable=False)
 
-    registration_fee = Column(Integer, nullable=False)
-
-    monthly_fee = Column(Integer, nullable=False)
+    # Sin cuotas propias: la matrícula y la colegiatura salen del tarifario
+    # institucional (institution_config), igual para todos los diplomados.
 
     active = Column(Boolean, default=True)
 

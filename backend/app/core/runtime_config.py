@@ -14,6 +14,11 @@ _DEFAULTS = {
     "late_fee": 3.00,
     "payment_cycle_days": 28,
     "alert_days_before": 7,
+    "registration_full_fee": 20.00,
+    "registration_promo_fee": 10.00,
+    "tuition_group_fee": 25.00,
+    "tuition_private_fee": 55.00,
+    "tuition_online_fee": 70.00,
 }
 
 
