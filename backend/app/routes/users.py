@@ -11,6 +11,7 @@ from app.database.session import get_db
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.user_schema import CashierResponse
+from app.services import audit_service
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
 
@@ -55,7 +56,7 @@ class PasswordReset(BaseModel):
 def create_cashier(
     data: CashierCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
+    admin: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
 ):
     email = str(data.email).lower()
     if db.query(User).filter(User.email == email).first():
@@ -72,8 +73,13 @@ def create_cashier(
         birth_date=data.birth_date,
         role_id=role.id,
         is_active=True,
+        # La contraseña la eligió el administrador: el cajero debe cambiarla
+        # en su primer inicio de sesión.
+        must_change_password=True,
     )
     db.add(cashier)
+    db.flush()
+    audit_service.record(db, admin, "CREACION_CAJERO", "user", cashier.id, f"{cashier.full_name} ({email})")
     db.commit()
     db.refresh(cashier)
     return cashier
@@ -103,13 +109,15 @@ def set_cashier_status(
     cashier_id: int,
     data: CashierStatusUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
+    admin: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
 ):
     """Desactivar a un cajero que deja de trabajar (no se borra: sus cobros y
     cajas siguen en los reportes). Su sesión deja de servir al instante, porque
     get_current_user rechaza usuarios inactivos."""
     cashier = _get_cashier(db, cashier_id)
     cashier.is_active = data.is_active
+    audit_service.record(db, admin, "ACTIVACION_CAJERO" if data.is_active else "DESACTIVACION_CAJERO",
+                         "user", cashier.id, cashier.full_name)
     db.commit()
     db.refresh(cashier)
     return cashier
@@ -120,9 +128,14 @@ def reset_cashier_password(
     cashier_id: int,
     data: PasswordReset,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
+    admin: User = Depends(require_roles("ADMIN", "ADMINISTRADOR")),
 ):
     cashier = _get_cashier(db, cashier_id)
     cashier.password = hash_password(data.new_password)
+    # Temporal: el cajero la cambia al entrar. También lo desbloquea.
+    cashier.must_change_password = True
+    cashier.failed_login_attempts = 0
+    cashier.locked_until = None
+    audit_service.record(db, admin, "RESTABLECER_CONTRASENA", "user", cashier.id, cashier.full_name)
     db.commit()
     return {"message": f"Contraseña de {cashier.full_name} restablecida"}

@@ -3,9 +3,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.schemas.enrollment_schema import (EnrollmentCancel, EnrollmentCreate, EnrollmentResponse, EnrollmentUpdate)
 from app.services.enrollment_service import EnrollmentService
-from app.auth.dependencies import get_current_user, require_admin, require_roles
-from app.core.pricing import REGISTRATION_TYPES
-from app.services.cashier_service import CashierService
+from app.auth.dependencies import get_current_user, require_admin
 
 router = APIRouter(
     prefix="/enrollments",
@@ -13,47 +11,39 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
+
 @router.post("/", response_model=EnrollmentResponse)
 def create_enrollment(
     enrollment: EnrollmentCreate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Igual que en /payments: si un cajero cobra la matrícula debe tener la
-    # caja abierta, o esos $20/$10 quedan fuera de todo arqueo.
-    if (
-        current_user.role.name.upper() in {"CAJERO", "CASHIER"}
-        and REGISTRATION_TYPES.get(enrollment.registration_type, 0) > 0
-    ):
-        CashierService.verify_active_box(db, current_user.id)
-    try:
-        return EnrollmentService.create(db, enrollment, cashier_id=current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # Si la matrícula tiene costo, quien cobra debe tener su caja abierta
+    # (lo valida el servicio), o esos $20/$10 quedarían fuera del arqueo.
+    return EnrollmentService.create(db, enrollment, current_user)
+
 
 @router.get("/", response_model=list[EnrollmentResponse])
 def get_all(db: Session = Depends(get_db)):
     return EnrollmentService.get_all(db)
 
-@router.get("/{enrollment_id}", response_model=EnrollmentResponse)
-def get_by_id(
-    enrollment_id: int,
-    db: Session = Depends(get_db)
-):
-    enrollment = EnrollmentService.get_by_id(db, enrollment_id)
 
+@router.get("/{enrollment_id}", response_model=EnrollmentResponse)
+def get_by_id(enrollment_id: int, db: Session = Depends(get_db)):
+    enrollment = EnrollmentService.get_by_id(db, enrollment_id)
     if not enrollment:
         raise HTTPException(404, "Inscripción no encontrada")
-
     return enrollment
 
-@router.put("/{enrollment_id}", response_model=EnrollmentResponse, dependencies=[Depends(require_admin)])
+
+@router.put("/{enrollment_id}", response_model=EnrollmentResponse)
 def update(
     enrollment_id: int,
     data: EnrollmentUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
 ):
-    enrollment = EnrollmentService.update(db, enrollment_id, data.model_dump(exclude_unset=True))
+    enrollment = EnrollmentService.update(db, enrollment_id, data.model_dump(exclude_unset=True), current_user)
     if not enrollment:
         raise HTTPException(404, "Inscripción no encontrada")
     return enrollment
@@ -64,22 +54,21 @@ def cancel(
     enrollment_id: int,
     data: EnrollmentCancel,
     db: Session = Depends(get_db),
-    _admin=Depends(require_roles("ADMIN", "ADMINISTRADOR")),
+    current_user=Depends(require_admin),
 ):
-    enrollment = EnrollmentService.cancel(db, enrollment_id, data.reason)
+    enrollment = EnrollmentService.cancel(db, enrollment_id, data.reason, current_user)
     if not enrollment:
         raise HTTPException(404, "Inscripción no encontrada")
     return enrollment
 
 
-@router.delete("/{enrollment_id}", dependencies=[Depends(require_admin)])
+@router.delete("/{enrollment_id}")
 def delete(
     enrollment_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
 ):
-    enrollment = EnrollmentService.delete(db, enrollment_id)
-
+    enrollment = EnrollmentService.delete(db, enrollment_id, current_user)
     if not enrollment:
         raise HTTPException(404, "Inscripción no encontrada")
-
     return {"message": "Inscripción eliminada correctamente"}

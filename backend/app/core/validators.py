@@ -11,6 +11,8 @@ import re
 from datetime import date
 from typing import Optional
 
+from app.core import clock
+
 _LETTER = "A-Za-zÁÉÍÓÚÜÑáéíóúüñ"
 _NAME_RE = re.compile(rf"^[{_LETTER}]+(?:[ '\-][{_LETTER}]+)*$")
 _TEXT_RE = re.compile(rf"^[{_LETTER}0-9 .,#°º'/()\-]+$")
@@ -112,7 +114,7 @@ def password(value: str) -> str:
 
 
 def age_on(birth_date: date, today: Optional[date] = None) -> int:
-    today = today or date.today()
+    today = today or clock.today()
     return today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
 
 
@@ -121,7 +123,7 @@ def birth_date(value: Optional[date], min_age: int, max_age: int, label: str = "
     [min_age, max_age] (p. ej. un cajero que "nació hoy" no es válido)."""
     if value is None:
         return None
-    if value >= date.today():
+    if value >= clock.today():
         raise ValueError(f"{label} no puede ser hoy ni una fecha futura")
     age = age_on(value)
     if age < min_age:
@@ -135,7 +137,7 @@ def date_in_range(value: Optional[date], label: str, *, past_days: int, future_d
     """Fecha entre hoy - past_days y hoy + future_days."""
     if value is None:
         return None
-    today = date.today()
+    today = clock.today()
     if (today - value).days > past_days:
         raise ValueError(f"{label} es demasiado antigua (máximo {past_days} días atrás)")
     if (value - today).days > future_days:

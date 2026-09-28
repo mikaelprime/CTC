@@ -5,7 +5,7 @@ matplotlib.use("QtAgg")
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
-from theme import BG, BORDER, SURFACE, TEXT, TEXT_MUTED
+from theme import BORDER, SURFACE, TEXT_MUTED
 
 
 class ChartCanvas(FigureCanvasQTAgg):

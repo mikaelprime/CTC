@@ -35,7 +35,10 @@ _MARGIN_MM = 4.0
 _MM_PER_PX = 25.4 / 96  # QTextDocument trabaja en píxeles lógicos de 96 dpi
 
 
-def _ticket_document(title: str, rows: list[tuple[str, str]], footer: str) -> QTextDocument:
+def _ticket_document(title: str, rows: list[tuple[str, str]], footer: str,
+                     header: str = "CTC EL SALVADOR", stamp: str | None = None) -> QTextDocument:
+    """`stamp` es la fecha y hora del comprobante (en una reimpresión, la
+    del cobro original); por defecto, ahora."""
     rows_html = "".join(
         f"<tr><td style='color:{_MUTED};padding:2pt 6pt 2pt 0'>{escape(label)}</td>"
         f"<td align='right' style='font-weight:bold;padding:2pt 0'>{escape(value)}</td></tr>"
@@ -43,9 +46,9 @@ def _ticket_document(title: str, rows: list[tuple[str, str]], footer: str) -> QT
     )
     html = f"""
     <html><body style="font-family:Arial;color:{_INK};font-size:9pt">
-      <p align="center" style="margin:0;font-size:8pt;letter-spacing:2pt;color:{_ACCENT};font-weight:bold">CTC EL SALVADOR</p>
+      <p align="center" style="margin:0;font-size:8pt;letter-spacing:2pt;color:{_ACCENT};font-weight:bold">{escape(header.upper())}</p>
       <p align="center" style="margin:3pt 0 0 0;font-size:12pt;font-weight:bold">{escape(title)}</p>
-      <p align="center" style="margin:1pt 0 6pt 0;font-size:8pt;color:{_MUTED}">{datetime.now():%d/%m/%Y %H:%M}</p>
+      <p align="center" style="margin:1pt 0 6pt 0;font-size:8pt;color:{_MUTED}">{escape(stamp or f"{datetime.now():%d/%m/%Y %H:%M}")}</p>
       <hr style="color:{_ACCENT}"/>
       <table width="100%" cellspacing="0">{rows_html}</table>
       <hr style="color:{_RULE}"/>
@@ -93,7 +96,7 @@ def _fit_to_roll(document: QTextDocument, printer: QPrinter) -> None:
     ))
 
 
-def print_ticket(parent: QWidget, title: str, rows: list[tuple[str, str]], footer: str = "") -> None:
+def print_ticket(parent: QWidget, title: str, rows: list[tuple[str, str]], footer: str = "", **style) -> None:
     """Abre el diálogo de impresión de Windows con el ticket.
 
     `rows` es una lista de (etiqueta, valor) que se muestran como una tabla
@@ -106,10 +109,10 @@ def print_ticket(parent: QWidget, title: str, rows: list[tuple[str, str]], foote
             "Este equipo no tiene ninguna impresora instalada.\n¿Guardar el ticket como PDF?",
         )
         if answer == QMessageBox.Yes:
-            save_ticket_pdf(parent, title, rows, footer)
+            save_ticket_pdf(parent, title, rows, footer, **style)
         return
 
-    document = _ticket_document(title, rows, footer)
+    document = _ticket_document(title, rows, footer, **style)
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     dialog = QPrintDialog(printer, parent)
     dialog.setWindowTitle("Imprimir ticket")
@@ -125,30 +128,31 @@ def print_ticket(parent: QWidget, title: str, rows: list[tuple[str, str]], foote
             "(puede estar desconectada o no ser compatible).\n\n¿Guardar el ticket como PDF?",
         )
         if answer == QMessageBox.Yes:
-            save_ticket_pdf(parent, title, rows, footer)
+            save_ticket_pdf(parent, title, rows, footer, **style)
 
 
-def write_ticket_pdf(path: str, title: str, rows: list[tuple[str, str]], footer: str = "") -> bool:
+def write_ticket_pdf(path: str, title: str, rows: list[tuple[str, str]], footer: str = "", **style) -> bool:
     """Escribe el ticket en `path` (PDF de rollo de 80 mm). True si salió bien."""
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
     printer.setOutputFileName(path)
-    document = _ticket_document(title, rows, footer)
+    document = _ticket_document(title, rows, footer, **style)
     _fit_to_roll(document, printer)
     return _paint(document, printer)
 
 
-def save_ticket_pdf(parent: QWidget, title: str, rows: list[tuple[str, str]], footer: str = "") -> None:
+def save_ticket_pdf(parent: QWidget, title: str, rows: list[tuple[str, str]], footer: str = "",
+                    file_stem: str | None = None, **style) -> None:
     """Pregunta dónde guardar y guarda el ticket como PDF, sin usar impresoras."""
     folder = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
-    suggested = str(Path(folder) / f"Ticket_{datetime.now():%Y%m%d_%H%M%S}.pdf")
+    suggested = str(Path(folder) / f"{file_stem or f'Ticket_{datetime.now():%Y%m%d_%H%M%S}'}.pdf")
     path, _ = QFileDialog.getSaveFileName(parent, "Guardar ticket", suggested, "PDF (*.pdf)")
     if not path:
         return
     if not path.lower().endswith(".pdf"):
         path += ".pdf"
     try:
-        ok = write_ticket_pdf(path, title, rows, footer)
+        ok = write_ticket_pdf(path, title, rows, footer, **style)
     except Exception as exc:  # noqa: BLE001 - se informa al usuario
         QMessageBox.critical(parent, "No se pudo guardar el ticket", str(exc))
         return

@@ -28,16 +28,16 @@ def new_cashier(password="Caja2026"):
 @pytest.mark.parametrize(
     "method, path, body",
     [
-        ("delete", "/payments/1", None),
-        ("put", "/payments/1", {"status": "PAGADO"}),
         ("post", "/payments/1/void", {"reason": "Intento de cajero"}),
-        ("post", "/diplomas/", {"name": "Programa Cajero", "duration_months": 6, "registration_fee": 20, "monthly_fee": 25}),
+        ("post", "/diplomas/", {"name": "Programa Cajero", "duration_months": 6}),
         ("delete", "/diplomas/1", None),
         ("post", "/schedules/", {"name": "Turno Cajero", "start_time": "08:00:00", "end_time": "10:00:00"}),
         ("delete", "/schedules/1", None),
         ("delete", "/students/1", None),
         ("delete", "/enrollments/1", None),
-        ("get", "/reports/cashier-monthly?year=2026&month=1", None),
+        ("get", "/cashier/registers", None),
+        ("get", "/audit/", None),
+        ("put", "/config/", {"institution_name": "Otra"}),
         ("patch", "/users/cashiers/1", {"is_active": False}),
     ],
 )
@@ -57,8 +57,9 @@ def test_voided_payment_stays_in_history_and_installment_is_owed_again():
     }).json()
     payment_id = paid["payment_ids"][0]
 
-    # Un pago cobrado no se borra...
-    assert client.delete(f"/payments/{payment_id}", headers=headers).status_code == 409
+    # Un pago cobrado no se borra ni se edita (esas rutas ya no existen)...
+    assert client.delete(f"/payments/{payment_id}", headers=headers).status_code == 405
+    assert client.put(f"/payments/{payment_id}", headers=headers, json={"total": 1}).status_code == 405
     # ...se anula con motivo.
     voided = client.post(f"/payments/{payment_id}/void", headers=headers, json={"reason": "Error de digitación"})
     assert voided.status_code == 200

@@ -10,3 +10,6 @@ class TokenResponse(BaseModel):
     role: str
     user_id: int
     email: EmailStr
+    full_name: str
+    # Contraseña temporal: el escritorio pide cambiarla antes de continuar.
+    must_change_password: bool = False

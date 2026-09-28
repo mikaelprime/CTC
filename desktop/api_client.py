@@ -46,6 +46,10 @@ class ApiClient:
         self.user_email: Optional[str] = None
         self.user_role: Optional[str] = None
         self.user_id: Optional[int] = None
+        self.full_name: Optional[str] = None
+        # Contraseña temporal (creada o restablecida por el administrador):
+        # la app pide cambiarla antes de abrir el panel.
+        self.must_change_password = False
 
     def is_authenticated(self) -> bool:
         return bool(self.token)
@@ -67,6 +71,8 @@ class ApiClient:
         self.user_email = None
         self.user_role = None
         self.user_id = None
+        self.full_name = None
+        self.must_change_password = False
 
     def login(self, email: str, password: str) -> None:
         try:
@@ -86,6 +92,8 @@ class ApiClient:
         self.user_email = data.get("email", email)
         self.user_role = data.get("role")
         self.user_id = data.get("user_id")
+        self.full_name = data.get("full_name")
+        self.must_change_password = bool(data.get("must_change_password"))
 
     @staticmethod
     def _detail(resp: requests.Response) -> Optional[str]:

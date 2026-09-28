@@ -20,6 +20,13 @@ class Payment(Base):
         nullable=True
     )
 
+    # Comprobante al que pertenece la cuota y caja en la que entró el dinero.
+    # Antes la caja sumaba "los pagos del cajero creados desde que abrió", y
+    # una caja que quedaba abierta de un día para otro mezclaba cobros.
+    # Nulos solo en pagos anteriores a este cambio.
+    receipt_id = Column(Integer, ForeignKey("receipts.id"), nullable=True, index=True)
+    cash_register_id = Column(Integer, ForeignKey("cash_registers.id"), nullable=True, index=True)
+
     payment_date = Column(
         Date,
         nullable=False
@@ -91,3 +98,5 @@ class Payment(Base):
         "Enrollment",
         back_populates="payments"
     )
+
+    receipt = relationship("Receipt", back_populates="payments")

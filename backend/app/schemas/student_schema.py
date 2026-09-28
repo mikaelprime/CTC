@@ -54,11 +54,6 @@ class _StudentFields(BaseModel):
     def _birth_date(cls, v):
         return validators.birth_date(v, STUDENT_MIN_AGE, STUDENT_MAX_AGE)
 
-    @field_validator("dui", check_fields=False)
-    @classmethod
-    def _dui(cls, v):
-        return validators.dui(v, "El DUI del estudiante")
-
     @field_validator("responsible_dui", check_fields=False)
     @classmethod
     def _responsible_dui(cls, v):
@@ -121,7 +116,6 @@ class StudentCreate(_StudentFields):
     full_name: str
     age: Optional[int] = None
     birth_date: date
-    dui: Optional[str] = None
     address: str
     email: EmailStr
     contact_phone: str
@@ -143,7 +137,6 @@ class StudentUpdate(_StudentFields):
     full_name: Optional[str] = None
     age: Optional[int] = None
     birth_date: Optional[date] = None
-    dui: Optional[str] = None
     address: Optional[str] = None
     email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
@@ -199,3 +192,30 @@ class StudentSimple(BaseModel):
     full_name: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class StudentResponse(BaseModel):
+    """Ficha del estudiante. La edad se calcula al consultar desde la fecha
+    de nacimiento: guardada, quedaba desactualizada al pasar su cumpleaños."""
+
+    id: int
+    full_name: str
+    age: Optional[int] = None
+    birth_date: Optional[date] = None
+    address: Optional[str] = None
+    email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    schooling: Optional[str] = None
+    responsible_name: Optional[str] = None
+    responsible_dui: Optional[str] = None
+    responsible_kinship: Optional[str] = None
+    responsible_email: Optional[str] = None
+    responsible_whatsapp: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def _current_age(self):
+        if self.birth_date is not None:
+            self.age = validators.age_on(self.birth_date)
+        return self

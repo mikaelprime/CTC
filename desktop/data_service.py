@@ -170,7 +170,7 @@ def actividad_reciente(data: dict, limit: int = 8) -> list[dict]:
             {
                 "tipo": p["payment_type"] or "Pago de Cuota",
                 "estudiante": enrollment["student"]["full_name"] if enrollment else "—",
-                "id": f"PAG-{p['id']:04d}",
+                "id": f"R-{p['receipt_id']:06d}" if p.get("receipt_id") else f"PAG-{p['id']:04d}",
                 "programa": enrollment["diploma"]["name"] if enrollment else "—",
                 "monto": float(p["total"]),
                 "fecha": p["payment_date"],

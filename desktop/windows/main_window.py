@@ -1,10 +1,8 @@
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QDialog,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -15,8 +13,10 @@ from PySide6.QtWidgets import (
 
 from api_client import api
 from widgets import transitions
+from windows.change_password import change_password_dialog
 from widgets.animated_button import AnimatedButton
 from window_utils import show_maximized_on_current_screen
+from pages.audit_page import AuditPage
 from pages.cashiers_page import CashiersPage
 from pages.dashboard_page import DashboardPage
 from pages.diplomas_page import DiplomasPage
@@ -32,12 +32,13 @@ NAV_ITEMS = [
     ("📝 Inscripciones", EnrollmentsPage),
     ("💳 Pagos", PaymentsPage),
     ("📅 Horarios", SchedulesPage),
-    ("🎓 Diplomas", DiplomasPage),
-    ("🧾 Cajeros", CashiersPage),
+    ("📚 Diplomados", DiplomasPage),
+    ("🧾 Cajeros y cierres", CashiersPage),
+    ("📜 Bitácora", AuditPage),
     ("⚙️ Configuración", SettingsPage),
 ]
 
-ADMIN_ONLY = {"🎓 Diplomas", "🧾 Cajeros", "⚙️ Configuración"}
+ADMIN_ONLY = {"📚 Diplomados", "🧾 Cajeros y cierres", "📜 Bitácora", "⚙️ Configuración"}
 
 
 class MainWindow(QMainWindow):
@@ -157,20 +158,7 @@ class MainWindow(QMainWindow):
             widget.reload()
 
     def change_password(self) -> None:
-        from widgets.crud_page import Field, RecordDialog
-
-        fields = [
-            Field("current_password", "Contraseña actual", required=True),
-            Field("new_password", "Nueva contraseña", regex=r"^\S*$", max_length=128,
-                  placeholder="Mínimo 6, con letras y números", required=True),
-        ]
-        dialog = RecordDialog(
-            "Cambiar mi contraseña", fields, self,
-            submit=lambda values: api.post("/auth/change-password", json=values),
-        )
-        for name in ("current_password", "new_password"):
-            dialog.inputs[name].setEchoMode(QLineEdit.Password)
-        if dialog.exec() == QDialog.Accepted:
+        if change_password_dialog(self):
             QMessageBox.information(self, "Contraseña actualizada", "Usa la nueva contraseña la próxima vez que inicies sesión.")
 
     def handle_logout(self) -> None:

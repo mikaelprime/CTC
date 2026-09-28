@@ -9,8 +9,6 @@ from app.database.database import SessionLocal, engine
 from app.database.base import Base
 from app.models.diploma import Diploma
 from app.models.schedule import Schedule
-from app.models.student import Student
-from app.models.enrollment import Enrollment
 from app.models.role import Role
 from app.models.user import User
 from app.auth.security import hash_password
@@ -24,10 +22,10 @@ def populate_initial_data():
 
     # 1. Cargar Diplomados Oficiales
     diplomas_data = [
-        {"name": "Secretariado en Informática", "duration_months": 6, "registration_fee": 20.00, "monthly_fee": 25.00},
-        {"name": "Operador en Sistemas Informáticos", "duration_months": 6, "registration_fee": 20.00, "monthly_fee": 25.00},
-        {"name": "Marketing Digital", "duration_months": 4, "registration_fee": 20.00, "monthly_fee": 25.00},
-        {"name": "Soporte Técnico", "duration_months": 5, "registration_fee": 20.00, "monthly_fee": 25.00},
+        {"name": "Secretariado en Informática", "duration_months": 6},
+        {"name": "Operador en Sistemas Informáticos", "duration_months": 6},
+        {"name": "Marketing Digital", "duration_months": 4},
+        {"name": "Soporte Técnico", "duration_months": 5},
     ]
 
     for dip in diplomas_data:
@@ -70,6 +68,8 @@ def populate_initial_data():
             password=hash_password("123456"),
             birth_date=date(1990, 1, 1),
             role_id=admin_role.id,
+            # Contraseña de fábrica: el sistema obliga a cambiarla al entrar.
+            must_change_password=True,
         ))
     if db.query(User).filter(User.email == "cajero@ctc.edu.sv").first() is None:
         db.add(User(
@@ -78,6 +78,7 @@ def populate_initial_data():
             password=hash_password("123456"),
             birth_date=date(1995, 1, 1),
             role_id=cashier_role.id,
+            must_change_password=True,
         ))
     db.commit()
     db.close()

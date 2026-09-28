@@ -9,7 +9,6 @@ class Student(Base):
     full_name = Column(String, nullable=False)
     age = Column(Integer, nullable=True)
     birth_date = Column(Date, nullable=True)
-    dui = Column(String, nullable=True)
     address = Column(String, nullable=True)
     email = Column(String, nullable=True)
     contact_phone = Column(String, nullable=True)
@@ -22,5 +21,4 @@ class Student(Base):
     responsible_email = Column(String, nullable=True)
     responsible_whatsapp = Column(String, nullable=True)
 
-    # RELACIÓN QUE FALTABA Y QUE CAUSABA EL ERROR:
     enrollments = relationship("Enrollment", back_populates="student")

@@ -11,12 +11,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from app.database.base import Base
-from app.models.role import Role
-from app.models.user import User
-from app.models.student import Student
-from app.models.diploma import Diploma
-from app.models.schedule import Schedule
-from app.models.institution_config import InstitutionConfig
+import app.models  # noqa: F401  (registra todos los modelos para autogenerate)
 
 from dotenv import load_dotenv
 

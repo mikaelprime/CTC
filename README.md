@@ -6,24 +6,38 @@ colegiaturas cada 28 días desde una aplicación de escritorio.
 
 ## Funcionalidades
 
-- Inicio de sesión con correo y contraseña mediante JWT.
-- Roles `Administrador` y `Cajero` con permisos separados.
-- Creación de cajeros desde el panel del administrador.
-- Registro de estudiantes y datos del responsable.
-- Catálogo de diplomados, horarios e inscripciones.
-- Cálculo automático de fecha de finalización según la duración del diplomado.
-- Cálculo de próxima cuota cada 28 días desde el inicio de clases.
-- Búsqueda instantánea en estudiantes, inscripciones, pagos y catálogos.
-- Registro de pagos, efectivo recibido y cambio.
-- Recargo configurable por mora.
-- Apertura de caja con fondo inicial desde el módulo de Pagos.
-- Cierre de caja con arqueo físico y explicación obligatoria ante diferencias.
-- Reporte mensual de cajas y pagos próximos dentro de 7 días.
-- Comprobantes de inscripción y pago por correo SMTP configurable.
-- Dashboard con indicadores esenciales de estudiantes, inscripciones, pendientes y vencimientos.
-- Tema oscuro y claro.
-- Modo pantalla completa y salida segura del programa.
-- Animación de entrada del login y prevención de ventanas duplicadas.
+Cumple cada punto de la propuesta del proyecto; la matriz
+[docs/TRAZABILIDAD.md](docs/TRAZABILIDAD.md) liga cada requisito con su
+pantalla, su endpoint y su prueba automática.
+
+- **Registro de matrícula en un solo formulario** (datos del estudiante, del
+  responsable, diplomado, horario, fecha de matrícula, fecha de inicio de
+  clases y observaciones), guardado en una sola transacción.
+- **Cobro de colegiatura cada 28 días** desde la fecha de inicio de clases, con
+  número fijo de cuotas por diplomado (6 meses = 7 cuotas).
+- **Tarifario** (Matrícula $20, Promo 50% $10, Gratis $0; Grupal $25,
+  Privado $55, On-line $70) editable por el administrador.
+- **Efectivo y cambio** calculados al instante; también tarjeta y transferencia.
+- **Caja diaria** con fondo inicial, **arqueo por denominación**, justificación
+  obligatoria ante descuadres y **reportes de cierre** diario, por caja y mensual
+  (imprimibles y exportables a Excel/PDF).
+- **Alertas**: correo al estudiante y a su responsable 7 días antes del
+  vencimiento, estado **PENDIENTE** al pasar los 28 días, lista de **cobros
+  próximos y atrasados** siempre visible y aviso por **WhatsApp**.
+- **Comprobantes** con número correlativo (`R-000001`): ticket de 80 mm impreso,
+  PDF, correo y WhatsApp; reimpresión en cualquier momento.
+- **Recargo por mora** de $3.00 (configurable) con opción de aplicarlo o no.
+- **Estado de cuenta** por estudiante (cuotas pagadas y vencidas, saldo vencido
+  y saldo por pagar).
+- **Bitácora** de auditoría: cobros, anulaciones, cierres, cambios de
+  configuración y de usuarios.
+- Roles **Administrador** y **Cajero** aplicados en la API, contraseñas
+  temporales que deben cambiarse y bloqueo por intentos fallidos.
+- Hora oficial de El Salvador en todas las fechas de negocio.
+
+Documentación: [manual de usuario](docs/MANUAL_USUARIO.md) ·
+[manual técnico](docs/MANUAL_TECNICO.md) (arquitectura, modelo de datos,
+reglas de negocio, API, seguridad y despliegue).
 
 ## Arquitectura
 
@@ -86,47 +100,36 @@ y el `.exe` se comunica con ellos mediante FastAPI.
 
 ## Usuarios iniciales
 
-El seed del backend crea estas cuentas de desarrollo:
+El seed del backend crea estas cuentas con contraseña **temporal**; el sistema
+obliga a cambiarla en el primer inicio de sesión:
 
 - Administrador: `admin@ctc.edu.sv` / `123456`
 - Cajero: `cajero@ctc.edu.sv` / `123456`
 
-Cambia estas contraseñas antes de usar el sistema fuera de desarrollo.
-
 ## Flujo de caja
 
-1. Inicia sesión como cajero.
-2. Abre `Pagos` y selecciona `Abrir caja`.
-3. Ingresa el fondo inicial.
-4. Registra cobros únicamente con la caja abierta.
-5. Al finalizar, selecciona `Cerrar caja`, cuenta el efectivo e ingresa una explicación si existe diferencia.
+1. Inicia sesión y abre `Caja y cobros → Abrir caja` con el fondo inicial.
+2. Matricula en `Inscripciones → Nueva matrícula` y cobra colegiaturas con
+   `Cobrar colegiatura` (o doble clic en la lista de cobros próximos). Sin caja
+   abierta no se puede cobrar.
+3. Al terminar el turno, `Cerrar caja (arqueo)`: cuenta billetes y monedas, y
+   justifica cualquier diferencia. Se muestra el reporte de cierre.
 
 ## Permisos
 
 La API hace cumplir los roles (no solo el menú del escritorio):
 
-- **Solo administrador:** crear/editar/borrar programas y horarios, borrar
-  estudiantes o inscripciones, anular inscripciones y pagos, registrar o
-  editar pagos manuales, configuración, cajeros (crear, activar/desactivar,
-  restablecer contraseña) y el cierre mensual general.
-- **Cajero:** registrar y editar estudiantes, inscribir, cobrar, abrir/cerrar
-  su caja y ver su propio cierre mensual.
-- **Todos:** cambiar su propia contraseña.
+- **Solo administrador:** catálogos (diplomados y horarios), editar, anular o
+  borrar inscripciones, anular comprobantes, borrar estudiantes, tarifario y
+  configuración, cajeros (crear, activar/desactivar, restablecer contraseña),
+  todas las cajas y cierres, y la bitácora.
+- **Cajero:** matricular, editar estudiantes, cobrar, abrir/cerrar su caja y
+  ver sus propios cierres.
+- **Todos:** cambiar su propia contraseña. El administrador también puede
+  cobrar, con su propia caja.
 
-Un pago cobrado nunca se borra: se **anula** con motivo, queda en el
-historial y deja de sumar en caja y reportes.
-
-## Historial, edición y reportes
-
-- **Historial de pagos:** botón `Historial` en Estudiantes o Inscripciones;
-  muestra todas las inscripciones y cobros del estudiante (incluidos los
-  anulados, con motivo) y sus totales.
-- **Editar inscripción (admin):** turno, plan de colegiatura (aplica desde la
-  próxima cuota), observaciones y fecha de inicio (solo antes del primer
-  cobro de colegiatura). El programa no se cambia: se anula y se inscribe de nuevo.
-- **Exportar a Excel o PDF:** historial del estudiante, lista de pagos
-  (respeta el buscador), cobros próximos/atrasados y cierre mensual de caja.
-  Al guardar se elige el formato (`.xlsx` o `.pdf`).
+Un pago cobrado nunca se edita ni se borra: se **anula** el comprobante
+completo con motivo, queda en el historial y deja de sumar en caja y reportes.
 
 ## Correo
 
@@ -180,8 +183,11 @@ cd backend
 La prueba de cobros simultáneos necesita PostgreSQL (`SELECT ... FOR UPDATE`)
 y se omite con SQLite; corre en CI.
 
-La lógica de agregación del panel (`desktop/data_service.py`) tiene pruebas
-propias que no necesitan backend ni ventanas:
+`backend/tests/test_propuesta_pdf.py` tiene una prueba por cada punto de la
+propuesta del proyecto (incluido el ejemplo literal 01/08/2026 → 29/08/2026).
+
+El escritorio (panel, reportes de cierre, estado de cuenta, tickets) tiene
+pruebas propias que no necesitan backend ni ventanas:
 
 ```powershell
 & .venv\Scripts\python.exe -m pip install -r desktop\requirements-dev.txt

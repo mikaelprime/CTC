@@ -8,10 +8,9 @@ import pytest
 from tests.conftest import IS_SQLITE, client, student_payload
 
 
-# Coincide con TUITION_PLANS["GRUPAL"] (app.core.pricing): el precio ya no
-# sale de Diploma.monthly_fee, sino del plan de colegiatura elegido al
-# inscribir, y estas matrículas no especifican tuition_plan (usan el
-# default "GRUPAL").
+# Plan Grupal del tarifario institucional (app.core.pricing): el precio sale
+# del plan de colegiatura elegido al inscribir, y estas matrículas no
+# especifican tuition_plan (usan el default "GRUPAL").
 MONTHLY_FEE = 25
 
 
@@ -38,8 +37,6 @@ def create_enrollment(headers, start_date: date):
         json={
             "name": f"Diplomado Pagos {uuid4().hex[:8]}",
             "duration_months": 6,
-            "registration_fee": 25,
-            "monthly_fee": MONTHLY_FEE,
         },
     )
     assert diploma.status_code == 200

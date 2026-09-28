@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.core import validators
+from app.core import clock, validators
 from tests.conftest import VALID_DUI, client, student_payload
 from tests.test_payments import auth_headers, create_enrollment
 
@@ -81,8 +81,8 @@ def test_valid_cashier_is_created():
         {"schooling": "xyz"},
         {"birth_date": date.today().isoformat()},
         {"birth_date": (date.today() + timedelta(days=1)).isoformat()},
-        {"dui": "12345678-9"},                # dígito verificador incorrecto
-        {"dui": "abc"},
+        {"responsible_dui": "12345678-9"},    # dígito verificador incorrecto
+        {"responsible_dui": "abc"},
         {"email": "sin-arroba"},
         {"age": 40},                          # no coincide con la fecha de nacimiento
     ],
@@ -115,12 +115,17 @@ def test_student_required_fields_cannot_be_blank(field):
 
 def test_student_phone_is_normalized_and_age_is_computed():
     birth = date.today().replace(year=date.today().year - 25) - timedelta(days=1)
-    response = post_student(contact_phone="+503 7777 8888", birth_date=birth.isoformat(), dui=VALID_DUI.replace("-", ""))
+    response = post_student(
+        contact_phone="+503 7777 8888", birth_date=birth.isoformat(),
+        responsible_name="Rosa Pérez", responsible_dui=VALID_DUI.replace("-", ""),
+    )
     assert response.status_code == 200, response.json()
     data = response.json()
     assert data["contact_phone"] == "7777-8888"
     assert data["age"] == 25
-    assert data["dui"] == VALID_DUI
+    assert data["responsible_dui"] == VALID_DUI
+    # El estudiante no tiene DUI propio: la propuesta solo pide el del responsable.
+    assert "dui" not in data
 
 
 def test_minor_student_requires_responsible_data():
@@ -162,7 +167,7 @@ def _enrollment_ids(headers):
     student = post_student().json()
     diploma = client.post(
         "/diplomas/", headers=headers,
-        json={"name": f"Diplomado Validación {uuid4().hex[:6]}", "duration_months": 6, "registration_fee": 20, "monthly_fee": 25},
+        json={"name": f"Diplomado Validación {uuid4().hex[:6]}", "duration_months": 6},
     ).json()
     schedule = client.post(
         "/schedules/", headers=headers,
@@ -182,7 +187,8 @@ def _enrollment_ids(headers):
 )
 def test_enrollment_with_impossible_dates_is_rejected(dates):
     headers = auth_headers()
-    response = client.post("/enrollments/", headers=headers, json={**_enrollment_ids(headers), **dates})
+    body = {**_enrollment_ids(headers), "start_date": dates["enrollment_date"], **dates}
+    response = client.post("/enrollments/", headers=headers, json=body)
     assert response.status_code == 422
 
 
@@ -194,18 +200,21 @@ def test_schedule_end_must_be_after_start():
     assert response.status_code == 422
 
 
-def test_payment_in_the_future_or_with_unknown_method_is_rejected():
+def test_payment_date_is_set_by_server_and_unknown_method_is_rejected():
     headers = auth_headers()
     enrollment = create_enrollment(headers, date.today())
-    future = client.post("/payments/collect", headers=headers, json={
+    # Una fecha enviada por el cliente se ignora: el cobro lleva la fecha del
+    # servidor (hora de El Salvador), no la de la computadora del cajero.
+    collected = client.post("/payments/collect", headers=headers, json={
         "enrollment_id": enrollment["id"],
         "payment_date": (date.today() + timedelta(days=3)).isoformat(),
         "cash_received": 50,
     })
-    assert future.status_code == 422
+    assert collected.status_code == 200, collected.json()
+    payment = client.get(f"/payments/{collected.json()['payment_ids'][0]}", headers=headers).json()
+    assert payment["payment_date"] == clock.today().isoformat()
     unknown = client.post("/payments/collect", headers=headers, json={
         "enrollment_id": enrollment["id"],
-        "payment_date": date.today().isoformat(),
         "payment_type": "Bitcoin",
         "cash_received": 50,
     })
@@ -216,15 +225,17 @@ def test_enrollment_returns_cash_and_change_for_the_ticket():
     headers = auth_headers()
     ids = _enrollment_ids(headers)
     response = client.post("/enrollments/", headers=headers, json={
-        **ids, "enrollment_date": date.today().isoformat(), "cash_received": 50,
+        **ids, "enrollment_date": date.today().isoformat(), "start_date": date.today().isoformat(), "cash_received": 50,
     })
     assert response.status_code == 200, response.json()
     data = response.json()
     assert float(data["registration_fee"]) == 20
     assert float(data["change"]) == 30
+    assert data["receipt_number"].startswith("R-")
 
     short = client.post("/enrollments/", headers=headers, json={
-        **_enrollment_ids(headers), "enrollment_date": date.today().isoformat(), "cash_received": 5,
+        **_enrollment_ids(headers), "enrollment_date": date.today().isoformat(),
+        "start_date": date.today().isoformat(), "cash_received": 5,
     })
     assert short.status_code == 400
 
@@ -232,7 +243,7 @@ def test_enrollment_returns_cash_and_change_for_the_ticket():
 def test_duplicate_active_enrollment_is_rejected():
     headers = auth_headers()
     ids = _enrollment_ids(headers)
-    body = {**ids, "enrollment_date": date.today().isoformat()}
+    body = {**ids, "enrollment_date": date.today().isoformat(), "start_date": date.today().isoformat()}
     assert client.post("/enrollments/", headers=headers, json=body).status_code == 200
     assert client.post("/enrollments/", headers=headers, json=body).status_code == 409
 
@@ -261,7 +272,8 @@ def test_enrollment_with_payments_is_cancelled_not_deleted():
 def test_free_enrollment_without_payments_can_still_be_deleted():
     headers = auth_headers()
     response = client.post("/enrollments/", headers=headers, json={
-        **_enrollment_ids(headers), "enrollment_date": date.today().isoformat(), "registration_type": "GRATIS",
+        **_enrollment_ids(headers), "enrollment_date": date.today().isoformat(),
+        "start_date": date.today().isoformat(), "registration_type": "GRATIS",
     })
     assert response.status_code == 200
     assert client.delete(f"/enrollments/{response.json()['id']}", headers=headers).status_code == 200

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, Numeric, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from app.database.base import Base
 
@@ -18,6 +18,10 @@ class CashRegister(Base):
 
     # Auditoría (Mejora solicitada)
     audit_explanation = Column(String, nullable=True)  # Justificación obligatoria si hay descuadre
+
+    # Arqueo por denominación (JSON {"20.00": 3, "0.25": 4, ...}): cuántos
+    # billetes y monedas de cada valor contó el cajero al cerrar.
+    cash_count = Column(Text, nullable=True)
 
     # Estados
     is_open = Column(Boolean, default=True)           # Estado de la caja diaria
