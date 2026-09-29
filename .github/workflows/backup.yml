@@ -1,0 +1,62 @@
+name: Respaldo de la base de datos
+
+# Copia diaria de la base de Supabase, cifrada. El repositorio es público y
+# cualquier usuario de GitHub puede descargar los artefactos, así que el
+# respaldo nunca se sube sin cifrar (tiene DUI, teléfonos y correos).
+#
+# Secretos del repositorio (Settings > Secrets and variables > Actions):
+#   BACKUP_DATABASE_URL  cadena de conexión de Supabase (la misma DATABASE_URL de Render)
+#   BACKUP_PASSPHRASE    contraseña para cifrar; sin ella el respaldo no se puede abrir
+#
+# Restaurar: ver docs/RESPALDOS.md.
+
+on:
+    schedule:
+        # 08:00 UTC = 2:00 a. m. en El Salvador.
+        -   cron: "0 8 * * *"
+    workflow_dispatch:
+
+jobs:
+    backup:
+        runs-on: ubuntu-latest
+
+        steps:
+        # Supabase usa PostgreSQL 17: pg_dump debe ser de la misma versión o
+        # más nueva, y Ubuntu trae una anterior.
+        -   name: Instalar cliente de PostgreSQL 17
+            run: |
+                sudo install -d /usr/share/postgresql-common/pgdg
+                sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+                echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+                    | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+                sudo apt-get update -q
+                sudo apt-get install -y -q --no-install-recommends postgresql-client-17
+
+        -   name: Respaldar y cifrar
+            env:
+                DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+                BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+            run: |
+                if [ -z "$DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+                    echo "::error::Faltan los secretos BACKUP_DATABASE_URL y/o BACKUP_PASSPHRASE"
+                    exit 1
+                fi
+                stamp=$(TZ=America/El_Salvador date +%Y-%m-%d_%H%M)
+                echo "STAMP=$stamp" >> "$GITHUB_ENV"
+                # Solo el esquema public: es donde vive todo el sistema (las
+                # demás son internas de Supabase).
+                /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" \
+                    --schema=public --format=custom --no-owner --no-privileges \
+                    --file=ctc.dump
+                gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" \
+                    --symmetric --cipher-algo AES256 --output "ctc_${stamp}.dump.gpg" ctc.dump
+                rm ctc.dump
+                ls -lh "ctc_${stamp}.dump.gpg"
+
+        -   name: Guardar respaldo (30 días)
+            uses: actions/upload-artifact@v4
+            with:
+                name: respaldo-ctc-${{ env.STAMP }}
+                path: ctc_*.dump.gpg
+                retention-days: 30
+                if-no-files-found: error
