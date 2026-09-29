@@ -11,10 +11,12 @@
 ## Jornada del cajero
 
 ### 1. Abrir la caja
+
 **Caja y cobros → Abrir caja.** Escribe el fondo inicial (el efectivo con el
 que empiezas). Sin caja abierta el sistema no deja cobrar.
 
 ### 2. Registrar una matrícula
+
 **Inscripciones → Nueva matrícula.** Un solo formulario:
 
 1. **Estudiante:** *Estudiante nuevo* (llena sus datos; la edad se calcula
@@ -32,6 +34,7 @@ Al registrar aparece el comprobante: **Imprimir ticket**, **Guardar PDF** o
 estudiante y a su responsable.
 
 ### 3. Cobrar una colegiatura
+
 **Caja y cobros → 💵 Cobrar colegiatura** (o doble clic en un estudiante de la
 lista *Cobros próximos y atrasados*).
 
@@ -43,15 +46,18 @@ lista *Cobros próximos y atrasados*).
 5. Escribe el **Efectivo:** y entrega el **Cambio:** que indica el sistema.
 
 ### 4. Estar pendiente de los cobros
+
 El panel **Cobros próximos (7 días) y atrasados** está siempre visible en
 *Caja y cobros*: situación, cuotas vencidas, monto a cobrar y si ya se le
 envió el aviso por correo. **Avisar por WhatsApp** abre WhatsApp con el
 mensaje ya escrito. El sistema envía solo el aviso por correo 7 días antes.
 
 ### 5. Reimprimir un comprobante
+
 En la lista de pagos, botón **Ticket** de la fila.
 
 ### 6. Cerrar la caja
+
 **Caja y cobros → Cerrar caja (arqueo).** Cuenta los billetes y monedas de
 cada valor; el sistema suma y compara con el efectivo esperado (fondo +
 cobros en efectivo). Si hay sobrante o faltante escribe la justificación.
@@ -75,6 +81,7 @@ por concepto y por método, listo para **Imprimir** o **Exportar**.
 El administrador también puede matricular y cobrar, con su propia caja.
 
 ## Estado de cuenta del estudiante
+
 **Estudiantes** o **Inscripciones → Estado de cuenta**: inscripciones, cuotas
 pagadas y vencidas, saldo vencido, saldo por pagar del diplomado y cada pago
 (con su comprobante). Se puede imprimir o exportar a Excel/PDF para

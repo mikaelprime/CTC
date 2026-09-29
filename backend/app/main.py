@@ -2,11 +2,12 @@ import hmac
 import logging
 import os
 import threading
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 # Sin esto, el logging de Python queda sin configurar: el "handler de
@@ -126,6 +127,18 @@ def cron_reminders(x_cron_secret: str = Header(default="")):
     if not expected or not hmac.compare_digest(x_cron_secret, expected):
         raise HTTPException(status_code=403, detail="No autorizado")
     return {"reminders_sent": run_due_reminders()}
+
+
+_PANEL = Path(__file__).with_name("panel") / "index.html"
+
+
+@app.get("/panel", include_in_schema=False)
+def panel():
+    """Panel web de consulta (solo lectura) para ver desde el celular lo
+    cobrado, los atrasados y las cajas. Se sirve desde la misma dirección de
+    la API: no necesita otro hosting ni CORS. Los datos los pide la página
+    con el mismo inicio de sesión y permisos que la app de escritorio."""
+    return FileResponse(_PANEL, media_type="text/html; charset=utf-8")
 
 
 @app.get("/")

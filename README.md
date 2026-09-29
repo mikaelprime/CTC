@@ -39,6 +39,15 @@ Documentación: [manual de usuario](docs/MANUAL_USUARIO.md) ·
 [manual técnico](docs/MANUAL_TECNICO.md) (arquitectura, modelo de datos,
 reglas de negocio, API, seguridad y despliegue).
 
+### Complementos
+
+- **Panel web de consulta** (solo lectura, también en el celular):
+  `https://<tu-backend>.onrender.com/panel`.
+- **Respaldo diario cifrado** de la base de datos con GitHub Actions.
+- **Backend siempre despierto** y avisos de vencimiento diarios con GitHub Actions.
+
+Configuración y restauración: [docs/RESPALDOS.md](docs/RESPALDOS.md).
+
 ## Arquitectura
 
 - `backend/`: API FastAPI, reglas de negocio, autenticación y migraciones Alembic.

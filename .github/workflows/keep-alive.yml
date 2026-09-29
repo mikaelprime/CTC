@@ -1,0 +1,49 @@
+name: Mantener backend despierto y avisos diarios
+
+# El plan gratuito de Render duerme el servicio tras 15 minutos sin tráfico y
+# la primera petición tarda hasta un minuto en despertarlo. Este flujo:
+#   - lo visita cada 10 minutos para que siga despierto;
+#   - una vez al día llama a /api/cron/reminders para enviar los avisos de
+#     vencimiento aunque nadie haya iniciado sesión.
+#
+# Secreto del repositorio: CRON_SECRET (el mismo valor que tiene la variable
+# CRON_SECRET del servicio en Render > Environment).
+#
+# GitHub puede retrasar unos minutos las tareas programadas, y las desactiva
+# si el repositorio pasa 60 días sin actividad (se reactivan desde Actions).
+
+on:
+    schedule:
+        -   cron: "*/10 * * * *"
+        # 14:00 UTC = 8:00 a. m. en El Salvador.
+        -   cron: "0 14 * * *"
+    workflow_dispatch:
+
+env:
+    API_URL: https://ctc-backend-j3id.onrender.com
+
+jobs:
+    ping:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+        -   name: Visitar /api/health
+            run: curl --fail --silent --show-error --retry 3 --retry-delay 20 --max-time 90 "$API_URL/api/health"
+
+    reminders:
+        # Solo en la corrida diaria o al ejecutarlo a mano.
+        if: github.event.schedule == '0 14 * * *' || github.event_name == 'workflow_dispatch'
+        needs: ping
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+        -   name: Enviar avisos de vencimiento (7 días antes)
+            env:
+                CRON_SECRET: ${{ secrets.CRON_SECRET }}
+            run: |
+                if [ -z "$CRON_SECRET" ]; then
+                    echo "::error::Falta el secreto CRON_SECRET"
+                    exit 1
+                fi
+                curl --fail --silent --show-error --max-time 120 -X POST \
+                    -H "X-Cron-Secret: $CRON_SECRET" "$API_URL/api/cron/reminders"
