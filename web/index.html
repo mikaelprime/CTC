@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CTC Campus</title>
 <meta name="description" content="Aplicación de matrículas, colegiaturas y caja de CTC El Salvador. Descarga para Windows y guías.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="icon-256.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#123b43">
+<meta property="og:title" content="CTC Campus">
+<meta property="og:description" content="Descarga la aplicación de matrículas, colegiaturas y caja de CTC El Salvador.">
+<meta property="og:image" content="https://mikaelprime.github.io/CTC/icon-256.png">
+<meta property="og:url" content="https://mikaelprime.github.io/CTC/">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -63,7 +71,7 @@
 <header class="sticky top-0 z-20 bg-paper/85 backdrop-blur border-b border-line/70">
   <nav class="max-w-6xl 2xl:max-w-7xl mx-auto px-5 h-16 flex items-center justify-between">
     <a href="#" class="flex items-center gap-2.5 font-semibold tracking-tight">
-      <span class="w-7 h-7 rounded-md bg-pine text-white grid place-items-center font-serif text-sm">C</span>
+      <img src="icon-64.png" alt="" class="w-7 h-7">
       CTC Campus
     </a>
     <div class="flex items-center gap-6 text-sm">
@@ -174,7 +182,11 @@
             <p class="mt-1.5 text-ink/65">Ejecuta <span class="font-mono text-sm whitespace-nowrap">CTC-Campus.exe</span> y entra con tu usuario.</p>
           </li>
         </ol>
-        <p class="reveal mt-14 pt-6 border-t border-line text-ink/65 max-w-xl">
+        <div class="reveal mt-12 flex gap-3 rounded-xl border border-line bg-white/60 p-4 max-w-xl text-sm text-ink/70">
+          <i data-lucide="shield-alert" class="w-5 h-5 shrink-0 text-[#b45309]"></i>
+          <p>La primera vez, Windows puede mostrar <span class="text-ink font-medium">«Windows protegió su PC»</span>. Es normal en programas que no compran firma digital: haz clic en <span class="text-ink font-medium">Más información</span> y luego en <span class="text-ink font-medium">Ejecutar de todas formas</span>. Solo pasa una vez.</p>
+        </div>
+        <p class="reveal mt-10 pt-6 border-t border-line text-ink/65 max-w-xl">
           Los datos se guardan en la nube (<span class="text-ink">Render</span> y <span class="text-ink">Supabase</span>), así que todas las computadoras ven la misma información y no hace falta descargar nada más.
         </p>
       </div>
