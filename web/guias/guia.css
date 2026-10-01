@@ -1,0 +1,46 @@
+/* Estilo de las guías descargables (se ven en el navegador y se imprimen a PDF). */
+:root { --ink: #183039; --muted: #5f777d; --line: #d7e4e2; --brand: #123b43; --accent: #0f9d8a; --soft: #e2f5f2; --warn: #fff4e5; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 20px 48px; }
+.portada { border-bottom: 3px solid var(--accent); padding-bottom: 14px; margin-bottom: 22px; }
+.portada small { color: var(--accent); font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; font-size: 12px; }
+h1 { margin: 4px 0 6px; font-size: 28px; color: var(--brand); }
+.portada p { margin: 0; color: var(--muted); }
+h2 { font-size: 18px; color: var(--brand); margin: 26px 0 8px; display: flex; align-items: center; gap: 10px; break-after: avoid; }
+h2 .n { background: var(--accent); color: #fff; border-radius: 50%; width: 26px; height: 26px; display: inline-grid; place-items: center; font-size: 14px; flex: none; }
+ol, ul { padding-left: 22px; margin: 6px 0; }
+li { margin: 3px 0; }
+b { color: var(--brand); }
+.nota { background: var(--soft); border-left: 4px solid var(--accent); border-radius: 6px; padding: 10px 14px; margin: 12px 0; break-inside: avoid; }
+.alerta { background: var(--warn); border-left: 4px solid #b45309; border-radius: 6px; padding: 10px 14px; margin: 12px 0; break-inside: avoid; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14px; break-inside: avoid; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: #f5f9f8; color: var(--brand); }
+code { background: #f1f5f4; border-radius: 4px; padding: 1px 5px; font-size: 13px; overflow-wrap: anywhere; }
+pre { background: #f1f5f4; border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: 13px; }
+.pie { margin-top: 34px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+@page { size: Letter; margin: 16mm 14mm; }
+.volver { display: inline-block; margin-bottom: 18px; color: var(--accent); text-decoration: none; font-weight: 600; font-size: 14px; }
+
+/* PDF: solo texto, en blanco y negro, sin cajas ni colores. */
+@media print {
+  body { font: 11pt/1.5 Arial, Helvetica, sans-serif; color: #000; }
+  main { padding: 0; max-width: none; }
+  .volver { display: none; }
+  .portada { border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 14px; }
+  .portada small, .portada p { color: #000; letter-spacing: 0; text-transform: none; font-weight: normal; font-size: 10pt; }
+  h1 { font-size: 20pt; color: #000; }
+  h2 { font-size: 13pt; color: #000; margin: 18px 0 6px; display: block; }
+  h2 .n { all: unset; }
+  h2 .n::after { content: ". "; }
+  b { color: #000; }
+  .nota, .alerta { background: none; border: 0; border-radius: 0; padding: 0; margin: 8px 0; }
+  .alerta::before { content: "Importante: "; font-weight: bold; }
+  table { font-size: 10pt; }
+  th { background: none; color: #000; border-bottom: 1px solid #000; }
+  th, td { padding: 4px 8px 4px 0; border-bottom: 1px solid #bbb; }
+  code { background: none; padding: 0; font: 10pt "Courier New", monospace; }
+  pre { background: none; border-radius: 0; padding: 0 0 0 10px; border-left: 2px solid #999; font: 10pt "Courier New", monospace; white-space: pre-wrap; }
+  .pie { color: #000; border-top: 1px solid #000; font-size: 9pt; }
+}

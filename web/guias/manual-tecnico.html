@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guía técnica · CTC Campus</title>
+<link rel="stylesheet" href="guia.css">
+</head>
+<body>
+<main>
+  <a class="volver" href="../index.html">← Volver a descargas</a>
+  <div class="portada">
+    <small>CTC Campus · CTC El Salvador</small>
+    <h1>Guía técnica</h1>
+    <p>Cómo está armado el sistema y dónde vive cada parte.</p>
+  </div>
+
+  <h2><span class="n">1</span>Las piezas del sistema</h2>
+  <table>
+    <tr><th>Pieza</th><th>Qué es</th><th>Dónde corre</th></tr>
+    <tr><td><b>Aplicación</b></td><td>Programa de Windows (Python + PySide6) que usan cajeros y administrador</td><td>En cada computadora</td></tr>
+    <tr><td><b>API</b></td><td>Servidor FastAPI con todas las reglas de cobro, caja y permisos</td><td>Render (gratis)</td></tr>
+    <tr><td><b>Base de datos</b></td><td>PostgreSQL con estudiantes, pagos, cajas y bitácora</td><td>Supabase (gratis)</td></tr>
+    <tr><td><b>Correo</b></td><td>Envío de comprobantes y avisos de vencimiento</td><td>Mailjet (gratis)</td></tr>
+    <tr><td><b>Tareas automáticas</b></td><td>Respaldo diario y mantener la API despierta</td><td>GitHub Actions (gratis)</td></tr>
+  </table>
+  <div class="nota">La aplicación <b>no guarda datos en la computadora</b>: todo pasa por la API y queda en Supabase.
+    Por eso varias computadoras ven la misma información y no hay que instalar ninguna base de datos.</div>
+
+  <h2><span class="n">2</span>Cómo se conectan</h2>
+  <pre>Aplicación (.exe)  ──HTTPS──▶  API (Render)  ──▶  PostgreSQL (Supabase)
+                                    └──▶  Mailjet (correos)</pre>
+  <p>La aplicación sabe a qué API conectarse por el archivo <code>config.json</code> que va junto al <code>.exe</code>:</p>
+  <pre>{ "api_base_url": "https://ctc-backend-j3id.onrender.com" }</pre>
+
+  <h2><span class="n">3</span>Reglas principales</h2>
+  <ul>
+    <li>Las colegiaturas vencen <b>cada 28 días</b> desde la fecha de inicio de clases (6 meses = 7 cuotas).</li>
+    <li>No se cobra sin una <b>caja abierta</b>; al cerrar se hace el arqueo y se justifica cualquier diferencia.</li>
+    <li>Cada cobro genera un <b>comprobante</b> con número correlativo (<code>R-000001</code>).</li>
+    <li>Un pago nunca se borra: se <b>anula</b> con motivo y queda en el historial.</li>
+    <li>7 días antes del vencimiento se manda un <b>correo de aviso</b> al estudiante y a su responsable.</li>
+    <li>Las fechas usan la hora oficial de El Salvador.</li>
+  </ul>
+
+  <h2><span class="n">4</span>Usuarios y seguridad</h2>
+  <ul>
+    <li>Dos roles: <b>Administrador</b> (todo) y <b>Cajero</b> (matricular, cobrar y su propia caja).</li>
+    <li>Los permisos los revisa la API, no solo el menú de la aplicación.</li>
+    <li>Contraseñas cifradas (bcrypt) y sesiones con token (JWT) que expiran.</li>
+    <li>5 intentos fallidos bloquean la cuenta 5 minutos.</li>
+    <li>La <b>bitácora</b> registra cobros, anulaciones, cierres y cambios de configuración.</li>
+  </ul>
+
+  <h2><span class="n">5</span>Configuración del servidor (Render)</h2>
+  <p>Variables que se configuran en Render → <i>Environment</i> (nunca se suben al repositorio):</p>
+  <table>
+    <tr><th>Variable</th><th>Para qué sirve</th></tr>
+    <tr><td><code>DATABASE_URL</code></td><td>Conexión a la base de Supabase</td></tr>
+    <tr><td><code>SECRET_KEY</code></td><td>Firma de las sesiones</td></tr>
+    <tr><td><code>MAILJET_API_KEY</code> / <code>MAILJET_API_SECRET</code></td><td>Envío de correos</td></tr>
+    <tr><td><code>EMAIL_FROM_ADDRESS</code></td><td>Correo que aparece como remitente</td></tr>
+    <tr><td><code>CRON_SECRET</code></td><td>Clave para la tarea diaria de avisos</td></tr>
+  </table>
+  <p>Al arrancar, la API actualiza sola la estructura de la base de datos (migraciones Alembic).</p>
+
+  <h2><span class="n">6</span>Revisar que todo funciona</h2>
+  <ul>
+    <li>Estado de la API: <code>https://ctc-backend-j3id.onrender.com/api/health</code></li>
+    <li>Documentación de la API: <code>https://ctc-backend-j3id.onrender.com/docs</code></li>
+    <li>Panel de consulta: <code>https://ctc-backend-j3id.onrender.com/panel</code></li>
+  </ul>
+
+  <h2><span class="n">7</span>Organización del código</h2>
+  <table>
+    <tr><th>Carpeta</th><th>Contenido</th></tr>
+    <tr><td><code>backend/</code></td><td>API, reglas de negocio, migraciones y pruebas</td></tr>
+    <tr><td><code>desktop/</code></td><td>Pantallas de la aplicación y script para crear el <code>.exe</code></td></tr>
+    <tr><td><code>web/</code></td><td>Esta página de descargas</td></tr>
+    <tr><td><code>.github/workflows/</code></td><td>Pruebas automáticas, respaldos y publicación de la página</td></tr>
+  </table>
+
+  <div class="pie">CTC Campus · Guía técnica</div>
+</main>
+</body>
+</html>

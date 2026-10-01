@@ -41,6 +41,8 @@ reglas de negocio, API, seguridad y despliegue).
 
 ### Complementos
 
+- **Página de descargas** (app y guías en PDF), publicada gratis
+  en GitHub Pages: `https://mikaelprime.github.io/CTC/` — ver [web/README.md](web/README.md).
 - **Panel web de consulta** (solo lectura, también en el celular):
   `https://<tu-backend>.onrender.com/panel`.
 - **Respaldo diario cifrado** de la base de datos con GitHub Actions.

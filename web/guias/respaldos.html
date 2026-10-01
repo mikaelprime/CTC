@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guía de respaldos · CTC Campus</title>
+<link rel="stylesheet" href="guia.css">
+</head>
+<body>
+<main>
+  <a class="volver" href="../index.html">← Volver a descargas</a>
+  <div class="portada">
+    <small>CTC Campus · CTC El Salvador</small>
+    <h1>Guía de respaldos</h1>
+    <p>Cómo se protege la información y cómo recuperarla si hace falta.</p>
+  </div>
+
+  <h2><span class="n">1</span>¿Qué se respalda y cuándo?</h2>
+  <ul>
+    <li><b>Toda la base de datos</b>: estudiantes, inscripciones, pagos, cajas y bitácora.</li>
+    <li><b>Todas las noches</b> a las 2:00 a. m. (hora de El Salvador), de forma automática.</li>
+    <li>Cada respaldo se guarda <b>30 días</b> en GitHub.</li>
+    <li>Va <b>cifrado</b>: sin la contraseña de respaldo nadie puede abrirlo.</li>
+  </ul>
+  <div class="nota">No hay que hacer nada a diario. Solo hay que configurarlo una vez (paso 2).</div>
+
+  <h2><span class="n">2</span>Configurarlo (una sola vez)</h2>
+  <p>En GitHub, dentro del repositorio: <b>Settings → Secrets and variables → Actions → New repository secret</b>. Crea estos dos:</p>
+  <table>
+    <tr><th>Nombre</th><th>Valor</th></tr>
+    <tr><td><code>BACKUP_DATABASE_URL</code></td><td>La cadena de conexión de Supabase (la misma que usa Render)</td></tr>
+    <tr><td><code>BACKUP_PASSPHRASE</code></td><td>Una contraseña larga inventada por ti</td></tr>
+  </table>
+  <div class="alerta"><b>Guarda la contraseña <code>BACKUP_PASSPHRASE</code> en un lugar seguro.</b>
+    Si se pierde, los respaldos no se pueden abrir.</div>
+
+  <h2><span class="n">3</span>Comprobar que funciona</h2>
+  <ol>
+    <li>En GitHub entra a la pestaña <b>Actions</b>.</li>
+    <li>Elige <b>Respaldo de la base de datos</b> y pulsa <b>Run workflow</b>.</li>
+    <li>Cuando termine en verde, abre la corrida: abajo, en <b>Artifacts</b>, está el archivo del respaldo.</li>
+  </ol>
+
+  <h2><span class="n">4</span>Descargar un respaldo</h2>
+  <p><b>Actions → Respaldo de la base de datos →</b> elige la fecha <b>→ Artifacts</b>.
+     Se descarga un archivo con nombre parecido a <code>ctc_2026-09-28_0200.dump.gpg</code>.</p>
+
+  <h2><span class="n">5</span>Recuperar la información</h2>
+  <p>Solo si se perdieron o dañaron datos. Necesitas <b>PostgreSQL</b> instalado en la computadora
+     (trae <code>pg_restore</code>) y <b>Git para Windows</b> (trae <code>gpg</code>).</p>
+  <ol>
+    <li>Abrir el respaldo (pide la contraseña de respaldo):
+      <pre>gpg --output ctc.dump --decrypt ctc_2026-09-28_0200.dump.gpg</pre></li>
+    <li>Cargarlo en la base de datos:
+      <pre>pg_restore --clean --if-exists --no-owner --no-privileges --dbname "CADENA_DE_SUPABASE" ctc.dump</pre></li>
+  </ol>
+  <div class="alerta">El paso 2 <b>reemplaza</b> los datos actuales por los del respaldo. Hazlo solo cuando estés seguro.</div>
+
+  <h2><span class="n">6</span>Respaldo extra desde Supabase</h2>
+  <p>Supabase también guarda copias propias en <b>Database → Backups</b>. Antes de un cambio grande en el sistema,
+     conviene revisar que haya una copia reciente.</p>
+
+  <div class="pie">CTC Campus · Guía de respaldos</div>
+</main>
+</body>
+</html>
